@@ -1,6 +1,7 @@
 import { Canvas } from '@react-three/fiber';
 import { useEffect, useRef } from 'react';
 import { AI_SKILL } from '../engine/ai/skill';
+import { useGameAudio } from '../audio/useGameAudio';
 import { currentAi, useGameStore } from '../store/useGameStore';
 import { Hud } from '../ui/Hud';
 import { Menu } from '../ui/Menu';
@@ -65,6 +66,7 @@ export default function Game() {
   useThrowGesture(input);
   useImpactHold();
   useAiTurns();
+  useGameAudio();
   return (
     <div className="game">
       <Canvas shadows dpr={[1, 2]} gl={{ antialias: true }} camera={{ fov: 20 }}>

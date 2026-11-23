@@ -7,6 +7,13 @@ export function SettingsPanel() {
   const assist = useGameStore((s) => s.assist);
   const bounce = useGameStore((s) => s.bounce);
   const camera = useGameStore((s) => s.camera);
+  const sound = useGameStore((s) => s.sound);
+  const caller = useGameStore((s) => s.caller);
+  const ambience = useGameStore((s) => s.ambience);
+  const onOff = [
+    { value: true, label: 'On' },
+    { value: false, label: 'Off' },
+  ] as const;
   const update = useGameStore((s) => s.updateSettings);
   return (
     <div className="settings-panel">
@@ -39,6 +46,28 @@ export function SettingsPanel() {
         ]}
         onChange={(v) => update({ camera: v })}
       />
+      <Segmented<boolean>
+        label="Sound"
+        value={sound}
+        options={onOff}
+        onChange={(v) => update({ sound: v })}
+      />
+      {sound && (
+        <>
+          <Segmented<boolean>
+            label="Caller"
+            value={caller}
+            options={onOff}
+            onChange={(v) => update({ caller: v })}
+          />
+          <Segmented<boolean>
+            label="Pub ambience"
+            value={ambience}
+            options={onOff}
+            onChange={(v) => update({ ambience: v })}
+          />
+        </>
+      )}
     </div>
   );
 }

@@ -1,6 +1,6 @@
 # 3D Darts — Implementation Plan
 
-Status: **M0–M5 complete** (scaffold/CI, prototype, x01, camera director, AI, Cricket/Around the Clock/stats). Next: M6 audio.
+Status: **M0–M6 complete** (… plus synthesized audio and caller). Next: M6.5 accounts.
 
 ---
 

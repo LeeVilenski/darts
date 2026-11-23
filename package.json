@@ -12,7 +12,9 @@
     "format": "prettier --write .",
     "test": "vitest run",
     "test:watch": "vitest",
-    "size": "size-limit"
+    "size": "size-limit",
+    "voice:list": "node scripts/build-voice-pack.ts --list",
+    "voice:build": "node scripts/build-voice-pack.ts"
   },
   "dependencies": {
     "@react-three/fiber": "^9.8.2",

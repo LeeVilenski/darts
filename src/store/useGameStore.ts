@@ -63,6 +63,9 @@ export interface Settings {
   assist: AssistLevel;
   bounce: BounceSetting;
   camera: CameraStyle;
+  sound: boolean;
+  caller: boolean;
+  ambience: boolean;
 }
 
 interface GameState extends Settings {
@@ -121,6 +124,9 @@ function loadSettings(): Settings {
     assist: 'standard',
     bounce: 'realistic',
     camera: prefersReducedMotion() ? 'reduced' : 'cinematic',
+    sound: true,
+    caller: true,
+    ambience: true,
   };
   return { ...fallback, ...readJson<Settings>(SETTINGS_KEY) };
 }
@@ -280,8 +286,8 @@ export const useGameStore = create<GameState>((set, get) => ({
 
   updateSettings(patch) {
     set(patch);
-    const { assist, bounce, camera } = get();
-    writeJson(SETTINGS_KEY, { assist, bounce, camera });
+    const { assist, bounce, camera, sound, caller, ambience } = get();
+    writeJson(SETTINGS_KEY, { assist, bounce, camera, sound, caller, ambience } satisfies Settings);
   },
 }));
 
