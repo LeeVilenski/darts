@@ -78,11 +78,31 @@ const EMBED = 0.007;
 
 type After = 'stick' | 'bounce' | 'floor';
 
+interface FlyingDartProps {
+  dart: ThrownDart;
+  /** Playback speed (slow-motion replays use < 1). */
+  timeScale?: number;
+  /** Called once when the flight reaches the board/floor. Defaults to reporting the landing to the store. */
+  onLanded?: () => void;
+  /** Id written to the camera tracker while flying (replays use their own). */
+  trackerId?: number;
+  hidden?: boolean;
+  /** Start from the beginning even if the dart already landed (replays). */
+  replay?: boolean;
+}
+
 /** One thrown dart: plays its precomputed flight, then sticks, bounces out or lies on the floor. */
-export function FlyingDart({ dart }: { dart: ThrownDart }) {
+export function FlyingDart({
+  dart,
+  timeScale = 1,
+  onLanded,
+  trackerId,
+  hidden,
+  replay,
+}: FlyingDartProps) {
   const ref = useRef<Group>(null);
-  const clock = useRef(dart.landed ? Infinity : 0);
-  const reported = useRef(dart.landed);
+  const clock = useRef(dart.landed && !replay ? Infinity : 0);
+  const reported = useRef(dart.landed && !replay);
   const landDart = useGameStore((s) => s.landDart);
 
   const after: After = useMemo(() => {
@@ -96,7 +116,7 @@ export function FlyingDart({ dart }: { dart: ThrownDart }) {
   useFrame((_, delta) => {
     const g = ref.current;
     if (!g) return;
-    clock.current += Math.min(delta, 1 / 20);
+    clock.current += Math.min(delta, 1 / 20) * timeScale;
     const t = clock.current;
     const { flight, launch } = dart;
     const T = flight.duration;
@@ -112,14 +132,15 @@ export function FlyingDart({ dart }: { dart: ThrownDart }) {
           Math.sin(2 * Math.PI * launch.wobble.frequency * t),
         launch.spin * t,
       );
-      dartTracker.id = dart.id;
+      dartTracker.id = trackerId ?? dart.id;
       dartTracker.position.set(s.p.x, s.p.y, s.p.z);
       return;
     }
 
     if (!reported.current) {
       reported.current = true;
-      landDart(dart.id);
+      if (onLanded) onLanded();
+      else landDart(dart.id);
     }
 
     const end = flight.samples[flight.samples.length - 1]!;
@@ -152,7 +173,11 @@ export function FlyingDart({ dart }: { dart: ThrownDart }) {
   });
 
   return (
-    <group ref={ref} position={[dart.launch.p0.x, dart.launch.p0.y, dart.launch.p0.z]}>
+    <group
+      ref={ref}
+      visible={!hidden}
+      position={[dart.launch.p0.x, dart.launch.p0.y, dart.launch.p0.z]}
+    >
       <DartModel />
     </group>
   );

@@ -1,6 +1,6 @@
 # 3D Darts — Implementation Plan
 
-Status: **M0–M6.5 complete** (… audio, caller, optional Supabase accounts). Next: M7 environment.
+Status: **M0–M7 complete** (… accounts, pub environment, broadcast cameras and replays). Next: M8 polish.
 
 ---
 

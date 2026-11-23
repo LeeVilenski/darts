@@ -35,7 +35,15 @@ export interface ThrownDart {
  * impact   – short hold on the landed dart (camera close-up); tap to skip
  * turnOver – turn finished (3 darts, bust or checkout); tap to collect
  */
-export type Phase = 'aiming' | 'flight' | 'impact' | 'turnOver';
+export type Phase = 'aiming' | 'flight' | 'impact' | 'replay' | 'turnOver';
+export type Quality = 'auto' | 'high' | 'low';
+
+/** A slow-motion replay of one dart, then continue to `then`. */
+export interface Replay {
+  dartId: number;
+  reason: '180' | 'checkout' | 'bounce';
+  then: Exclude<Phase, 'replay'>;
+}
 export type Screen = 'menu' | 'game';
 export type CameraStyle = 'cinematic' | 'reduced';
 
@@ -66,6 +74,8 @@ export interface Settings {
   sound: boolean;
   caller: boolean;
   ambience: boolean;
+  replays: boolean;
+  quality: Quality;
 }
 
 interface GameState extends Settings {
@@ -79,6 +89,7 @@ interface GameState extends Settings {
   practice: { darts: number; points: number; hits: PracticeHit[] };
   /** Speed up the current AI turn (skip button). */
   aiFast: boolean;
+  replay: Replay | null;
   startGame(setup: GameSetup): void;
   quitToMenu(): void;
   setAim(aim: { x: number; y: number }): void;
@@ -87,6 +98,7 @@ interface GameState extends Settings {
   setAiFast(fast: boolean): void;
   landDart(id: number): void;
   finishImpact(): void;
+  finishReplay(): void;
   collectDarts(): void;
   resetPractice(): void;
   updateSettings(patch: Partial<Settings>): void;
@@ -127,6 +139,8 @@ function loadSettings(): Settings {
     sound: true,
     caller: true,
     ambience: true,
+    replays: true,
+    quality: 'auto',
   };
   return { ...fallback, ...readJson<Settings>(SETTINGS_KEY) };
 }
@@ -196,6 +210,7 @@ export const useGameStore = create<GameState>((set, get) => ({
   darts: [],
   practice: emptyPractice(),
   aiFast: false,
+  replay: null,
 
   startGame(setup) {
     writeJson(SETUP_KEY, setup);
@@ -212,7 +227,7 @@ export const useGameStore = create<GameState>((set, get) => ({
   },
 
   quitToMenu() {
-    set({ screen: 'menu', match: null, darts: [], phase: 'aiming' });
+    set({ screen: 'menu', match: null, darts: [], phase: 'aiming', replay: null });
   },
 
   setAim(aim) {
@@ -250,7 +265,13 @@ export const useGameStore = create<GameState>((set, get) => ({
       const match = applyMatchDart(s.match, toDartScore(dart.result));
       if (match.status === 'matchWon' && s.setup.kind !== 'practice')
         recordMatch(match, s.setup.players);
-      set({ darts, match, phase: match.status === 'open' ? 'impact' : 'turnOver' });
+      const then = match.status === 'open' ? 'impact' : 'turnOver';
+      const reason = replayReason(match, dart);
+      if (reason && s.replays && s.camera !== 'reduced' && !s.aiFast) {
+        set({ darts, match, phase: 'replay', replay: { dartId: id, reason, then } });
+      } else {
+        set({ darts, match, phase: then });
+      }
       return;
     }
     const points = dart.result.kind === 'score' ? dart.result.points : 0;
@@ -267,6 +288,11 @@ export const useGameStore = create<GameState>((set, get) => ({
 
   finishImpact() {
     if (get().phase === 'impact') set({ phase: 'aiming' });
+  },
+
+  finishReplay() {
+    const { phase, replay } = get();
+    if (phase === 'replay' && replay) set({ phase: replay.then, replay: null });
   },
 
   collectDarts() {
@@ -286,10 +312,19 @@ export const useGameStore = create<GameState>((set, get) => ({
 
   updateSettings(patch) {
     set(patch);
-    const { assist, bounce, camera, sound, caller, ambience } = get();
-    writeJson(SETTINGS_KEY, { assist, bounce, camera, sound, caller, ambience } satisfies Settings);
+    const { assist, bounce, camera, sound, caller, ambience, replays, quality } = get();
+    const saved: Settings = { assist, bounce, camera, sound, caller, ambience, replays, quality };
+    writeJson(SETTINGS_KEY, saved);
   },
 }));
+
+/** Big moments get a slow-motion replay: a 180, a checkout, or a bounce-out. */
+function replayReason(match: MatchState, dart: ThrownDart): Replay['reason'] | null {
+  if (dart.result.kind === 'bounce') return 'bounce';
+  if (match.status === 'legWon' || match.status === 'matchWon') return 'checkout';
+  if (match.mode === 'x01' && match.turn.points === 180) return '180';
+  return null;
+}
 
 /** Fly a launched dart: precompute its flight and result, then animate it. */
 function launchDart(aim: { x: number; y: number }, launch: LaunchParams) {

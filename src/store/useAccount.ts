@@ -31,6 +31,8 @@ const SETTING_KEYS: (keyof Settings)[] = [
   'sound',
   'caller',
   'ambience',
+  'replays',
+  'quality',
 ];
 const pickSettings = (): Partial<Settings> => {
   const s = useGameStore.getState();

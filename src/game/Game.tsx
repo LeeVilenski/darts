@@ -8,6 +8,7 @@ import { Menu } from '../ui/Menu';
 import { useThrowGesture } from './input/useThrowGesture';
 import { Board } from './scene/Board';
 import { CameraDirector } from './scene/CameraDirector';
+import { QualityGovernor } from './scene/quality';
 import { FlyingDart } from './scene/Dart';
 import { Heatmap } from './scene/Heatmap';
 import { Reticle } from './scene/Reticle';
@@ -19,9 +20,32 @@ const IMPACT_HOLD = { cinematic: 1100, reduced: 700, fast: 250 } as const;
 const AI_TURN_END_HOLD = { normal: 1700, fast: 350 } as const;
 const AI_FAST_THINK_MS = 120;
 
+/** How long to hold on the replayed dart after it lands (ms). */
+const REPLAY_HOLD = 1000;
+const REPLAY_SPEED = 0.3;
+
 function Darts() {
   const darts = useGameStore((s) => s.darts);
-  return darts.map((d) => <FlyingDart key={d.id} dart={d} />);
+  const replay = useGameStore((s) => (s.phase === 'replay' ? s.replay : null));
+  const finishReplay = useGameStore((s) => s.finishReplay);
+  const replayed = replay ? darts.find((d) => d.id === replay.dartId) : undefined;
+  return (
+    <>
+      {darts.map((d) => (
+        <FlyingDart key={d.id} dart={d} hidden={replayed?.id === d.id} />
+      ))}
+      {replayed && (
+        <FlyingDart
+          key={`replay-${replayed.id}`}
+          dart={replayed}
+          replay
+          timeScale={REPLAY_SPEED}
+          trackerId={-replayed.id}
+          onLanded={() => window.setTimeout(finishReplay, REPLAY_HOLD)}
+        />
+      )}
+    </>
+  );
 }
 
 function useImpactHold() {
@@ -71,6 +95,7 @@ export default function Game() {
     <div className="game">
       <Canvas shadows dpr={[1, 2]} gl={{ antialias: true }} camera={{ fov: 20 }}>
         <CameraDirector />
+        <QualityGovernor />
         <Room />
         <Board />
         {screen === 'game' && (

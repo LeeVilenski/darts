@@ -23,6 +23,7 @@ const points = (d: ThrownDart) => (d.result.kind === 'score' ? d.result.points :
 
 export function Hud() {
   const match = useGameStore((s) => s.match);
+  const phase = useGameStore((s) => s.phase);
   const [menuOpen, setMenuOpen] = useState(false);
   return (
     <div className="hud">
@@ -41,11 +42,12 @@ export function Hud() {
         <TurnStrip />
       </header>
       <ScorePop />
+      <ReplayBadge />
       <footer className="hud-bottom">
         <Prompt />
         <SkipAi />
       </footer>
-      {match?.status === 'matchWon' && <MatchOver match={match} />}
+      {match?.status === 'matchWon' && phase === 'turnOver' && <MatchOver match={match} />}
       {menuOpen && <PauseSheet onClose={() => setMenuOpen(false)} />}
     </div>
   );
@@ -221,6 +223,22 @@ function Prompt() {
   return (
     <div className={`prompt${phase === 'turnOver' ? ' strong' : ''}`} data-testid="prompt">
       {text}
+    </div>
+  );
+}
+
+const REPLAY_TITLE = {
+  '180': 'One hundred and eighty!',
+  checkout: 'Game shot',
+  bounce: 'Bounce out',
+} as const;
+
+function ReplayBadge() {
+  const replay = useGameStore((s) => (s.phase === 'replay' ? s.replay : null));
+  if (!replay) return null;
+  return (
+    <div className="replay-badge" data-testid="replay">
+      <span className="rec">● REPLAY</span> {REPLAY_TITLE[replay.reason]} · tap to skip
     </div>
   );
 }

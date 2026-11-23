@@ -1,44 +1,200 @@
-import { useLayoutEffect, useRef } from 'react';
-import type { Object3D, SpotLight } from 'three';
+import { useThree } from '@react-three/fiber';
+import { useEffect, useLayoutEffect, useMemo, useRef } from 'react';
+import { PMREMGenerator, type Object3D, type SpotLight } from 'three';
+import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
 import { WORLD } from '../../engine/board/geometry';
+import { useTier } from './quality';
+import { chalkboardTexture, paintingTexture, planksTexture } from './textures';
 
+const ROOM = { halfWidth: 2.2, height: 3, back: -0.04, front: 4.2 } as const;
+const WAINSCOT = 1.05;
+const CAB = { half: 0.33, depth: 0.05 } as const;
+const DOOR_ANGLE = 0.26; // radians the cabinet doors sit away from the wall
+
+/** Reflections for metal darts from three's built-in procedural room (no download). */
+function useEnvironment() {
+  const gl = useThree((s) => s.gl);
+  const scene = useThree((s) => s.scene);
+  useEffect(() => {
+    const pmrem = new PMREMGenerator(gl);
+    const env = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+    scene.environment = env;
+    scene.environmentIntensity = 0.35;
+    return () => {
+      scene.environment = null;
+      env.dispose();
+      pmrem.dispose();
+    };
+  }, [gl, scene]);
+}
+
+/** A small pub: panelled walls, floorboards, a dartboard cabinet, lamp, oche and a few props. */
 export function Room() {
+  useEnvironment();
+  const tier = useTier();
   const spot = useRef<SpotLight>(null);
   const target = useRef<Object3D>(null);
   useLayoutEffect(() => {
     if (spot.current && target.current) spot.current.target = target.current;
   }, []);
 
+  const tex = useMemo(
+    () => ({
+      panel: planksTexture([92, 54, 32], 8, true, [6, 1]),
+      sidePanel: planksTexture([92, 54, 32], 8, true, [5, 1]),
+      floor: planksTexture([110, 72, 44], 6, false, [4, 6]),
+      cabinet: planksTexture([70, 38, 22], 4, true, [1, 1]),
+      chalk: chalkboardTexture(),
+      art: [paintingTexture(20), paintingTexture(200), paintingTexture(120)],
+    }),
+    [],
+  );
+  useEffect(
+    () => () =>
+      [tex.panel, tex.sidePanel, tex.floor, tex.cabinet, tex.chalk, ...tex.art].forEach((t) =>
+        t.dispose(),
+      ),
+    [tex],
+  );
+
+  const depth = ROOM.front - ROOM.back;
+  const midZ = (ROOM.front + ROOM.back) / 2;
+  const shadows = tier === 'high';
+
   return (
     <>
-      <color attach="background" args={['#0d0f14']} />
-      <hemisphereLight args={['#c9d4ff', '#2a1d12', 0.35]} />
-      <ambientLight intensity={0.08} />
+      <color attach="background" args={['#0b0c10']} />
+      <hemisphereLight args={['#ffe2c0', '#2a1d12', 0.5]} />
+      <ambientLight intensity={0.06} />
+
+      {/* Lamp over the board */}
+      <group position={[0, 2.45, 0.62]}>
+        <mesh rotation={[0.5, 0, 0]}>
+          <cylinderGeometry args={[0.05, 0.16, 0.16, 24, 1, true]} />
+          <meshStandardMaterial color="#1a1a1a" metalness={0.6} roughness={0.4} side={2} />
+        </mesh>
+        <mesh position={[0, -0.03, 0.02]}>
+          <sphereGeometry args={[0.035, 16, 12]} />
+          <meshStandardMaterial emissive="#fff1d6" emissiveIntensity={3} color="#fff" />
+        </mesh>
+      </group>
       <spotLight
         ref={spot}
-        position={[0.25, 3.1, 1.1]}
-        angle={0.42}
-        penumbra={0.7}
-        intensity={9}
+        position={[0, 2.42, 0.64]}
+        angle={0.5}
+        penumbra={0.75}
+        intensity={3.2}
         distance={8}
         decay={2}
-        castShadow
+        color="#fff4e0"
+        castShadow={shadows}
         shadow-mapSize={[1024, 1024]}
         shadow-bias={-0.0004}
-        shadow-camera-near={0.5}
-        shadow-camera-far={5}
+        shadow-camera-near={0.3}
+        shadow-camera-far={4}
       />
       <object3D ref={target} position={[0, WORLD.bullHeight, 0]} />
-      {/* Back wall */}
-      <mesh position={[0, 1.6, -0.04]} receiveShadow>
-        <planeGeometry args={[8, 4]} />
-        <meshStandardMaterial color="#2b3442" roughness={0.95} />
+      {/* Warm wall sconces */}
+      {[-1.5, 1.5].map((x) => (
+        <group key={x} position={[x, 2.05, ROOM.back + 0.06]}>
+          <mesh>
+            <sphereGeometry args={[0.05, 16, 12]} />
+            <meshStandardMaterial emissive="#ffb066" emissiveIntensity={2.5} color="#ffcf99" />
+          </mesh>
+          <pointLight intensity={0.9} distance={3} decay={2} color="#ffb066" />
+        </group>
+      ))}
+
+      {/* Back wall: paint above, wood panelling below */}
+      <mesh position={[0, (ROOM.height + WAINSCOT) / 2, ROOM.back]} receiveShadow>
+        <planeGeometry args={[ROOM.halfWidth * 2, ROOM.height - WAINSCOT]} />
+        <meshStandardMaterial color="#1f3a33" roughness={0.95} />
       </mesh>
-      {/* Floor */}
-      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0, 2]} receiveShadow>
-        <planeGeometry args={[8, 8]} />
-        <meshStandardMaterial color="#3a2a1e" roughness={0.8} />
+      <mesh position={[0, WAINSCOT / 2, ROOM.back + 0.002]} receiveShadow>
+        <planeGeometry args={[ROOM.halfWidth * 2, WAINSCOT]} />
+        <meshStandardMaterial map={tex.panel} roughness={0.7} />
       </mesh>
+      <mesh position={[0, WAINSCOT, ROOM.back + 0.02]}>
+        <boxGeometry args={[ROOM.halfWidth * 2, 0.04, 0.04]} />
+        <meshStandardMaterial map={tex.cabinet} roughness={0.6} />
+      </mesh>
+
+      {/* Side walls */}
+      {[-1, 1].map((side) => (
+        <group
+          key={side}
+          position={[side * ROOM.halfWidth, 0, midZ]}
+          rotation={[0, -side * (Math.PI / 2), 0]}
+        >
+          <mesh position={[0, (ROOM.height + WAINSCOT) / 2, 0]} receiveShadow>
+            <planeGeometry args={[depth, ROOM.height - WAINSCOT]} />
+            <meshStandardMaterial color="#1f3a33" roughness={0.95} />
+          </mesh>
+          <mesh position={[0, WAINSCOT / 2, 0.002]} receiveShadow>
+            <planeGeometry args={[depth, WAINSCOT]} />
+            <meshStandardMaterial map={tex.sidePanel} roughness={0.7} />
+          </mesh>
+        </group>
+      ))}
+
+      {/* Floor and ceiling */}
+      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0, midZ]} receiveShadow>
+        <planeGeometry args={[ROOM.halfWidth * 2, depth]} />
+        <meshStandardMaterial map={tex.floor} roughness={0.55} />
+      </mesh>
+      <mesh rotation={[Math.PI / 2, 0, 0]} position={[0, ROOM.height, midZ]}>
+        <planeGeometry args={[ROOM.halfWidth * 2, depth]} />
+        <meshStandardMaterial color="#141210" roughness={1} />
+      </mesh>
+
+      {/* Oche: a raised throw line at regulation distance */}
+      <mesh position={[0, 0.019, WORLD.ocheDistance + 0.025]} castShadow receiveShadow>
+        <boxGeometry args={[0.61, 0.038, 0.05]} />
+        <meshStandardMaterial color="#c9a227" metalness={0.7} roughness={0.35} />
+      </mesh>
+
+      {/* Dartboard cabinet: back panel and two open doors */}
+      <mesh position={[0, WORLD.bullHeight, ROOM.back + 0.005]} receiveShadow>
+        <boxGeometry args={[CAB.half * 2, CAB.half * 2, 0.01]} />
+        <meshStandardMaterial map={tex.cabinet} roughness={0.6} />
+      </mesh>
+      {[-1, 1].map((side) => (
+        <group
+          key={side}
+          position={[side * CAB.half, WORLD.bullHeight, ROOM.back + 0.01]}
+          rotation={[0, -side * DOOR_ANGLE, 0]}
+        >
+          <mesh position={[side * (CAB.half / 2), 0, 0.01]} castShadow receiveShadow>
+            <boxGeometry args={[CAB.half, CAB.half * 2, 0.02]} />
+            <meshStandardMaterial map={tex.cabinet} roughness={0.6} />
+          </mesh>
+          {/* Chalk scoreboard on the inside of the left door */}
+          {side === -1 && (
+            <mesh position={[side * (CAB.half / 2), 0, 0.021]}>
+              <planeGeometry args={[CAB.half * 0.85, CAB.half * 1.7]} />
+              <meshStandardMaterial map={tex.chalk} roughness={0.95} />
+            </mesh>
+          )}
+        </group>
+      ))}
+
+      {/* Framed pictures */}
+      {[
+        [-1.35, 1.85, 0.42, 0.52, 0],
+        [1.35, 1.9, 0.36, 0.46, 1],
+        [1.85, 1.6, 0.3, 0.38, 2],
+      ].map(([x, y, w, h, art]) => (
+        <group key={x} position={[x!, y!, ROOM.back + 0.015]}>
+          <mesh>
+            <boxGeometry args={[w! + 0.05, h! + 0.05, 0.02]} />
+            <meshStandardMaterial color="#2a1a0e" roughness={0.5} metalness={0.2} />
+          </mesh>
+          <mesh position={[0, 0, 0.011]}>
+            <planeGeometry args={[w!, h!]} />
+            <meshStandardMaterial map={tex.art[art!]} roughness={0.8} />
+          </mesh>
+        </group>
+      ))}
     </>
   );
 }

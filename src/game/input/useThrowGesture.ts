@@ -45,6 +45,10 @@ export function useThrowGesture(el: RefObject<HTMLElement | null>) {
     const down = (e: PointerEvent) => {
       let store = useGameStore.getState();
       if (store.screen !== 'game') return;
+      if (store.phase === 'replay') {
+        store.finishReplay();
+        return;
+      }
       if (store.phase === 'turnOver') {
         store.collectDarts();
         return;
