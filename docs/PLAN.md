@@ -1,6 +1,6 @@
 # 3D Darts — Implementation Plan
 
-Status: **M0–M6 complete** (… plus synthesized audio and caller). Next: M6.5 accounts.
+Status: **M0–M6.5 complete** (… audio, caller, optional Supabase accounts). Next: M7 environment.
 
 ---
 

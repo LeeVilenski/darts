@@ -527,3 +527,52 @@ input {
 .muted {
   color: var(--muted);
 }
+
+/* ---------- account ---------- */
+.account {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  border-top: 1px solid var(--line);
+  padding-top: 14px;
+}
+.account-line {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  flex-wrap: wrap;
+  font-size: 14px;
+}
+.account-form {
+  display: flex;
+  gap: 8px;
+}
+.account-form input {
+  flex: 1;
+  min-width: 0;
+  min-height: 44px;
+  border-radius: 10px;
+  border: 1px solid var(--line);
+  background: rgba(255, 255, 255, 0.05);
+  padding: 0 12px;
+  font-size: 16px;
+  -webkit-user-select: text;
+  user-select: text;
+}
+.sync {
+  color: var(--muted);
+  font-size: 13px;
+}
+.sync.synced {
+  color: var(--good);
+}
+.sync.error,
+.form-error {
+  color: var(--bad);
+  font-size: 13px;
+  margin: 0;
+}
+.small {
+  font-size: 13px;
+  margin: 0;
+}

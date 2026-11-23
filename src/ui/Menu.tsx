@@ -9,6 +9,7 @@ import {
   type GameSetup,
   type PlayerSetup,
 } from '../store/useGameStore';
+import { AccountPanel } from './AccountPanel';
 import { Segmented } from './Segmented';
 import { SettingsPanel } from './SettingsPanel';
 import { StatsSheet } from './StatsSheet';
@@ -233,6 +234,7 @@ export function Menu() {
           {showSettings ? 'Hide settings' : 'Settings'}
         </button>
         {showSettings && <SettingsPanel />}
+        <AccountPanel />
         <button
           type="button"
           className="ghost-btn"
