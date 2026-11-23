@@ -1,6 +1,6 @@
 # 3D Darts — Implementation Plan
 
-Status: **draft, awaiting confirmation of open decisions (§6)**. No application code yet.
+Status: **decisions confirmed (§6)** — ready to start M0. No application code yet.
 
 ---
 
@@ -17,6 +17,8 @@ Status: **draft, awaiting confirmation of open decisions (§6)**. No application
 | Physics | **Custom ballistic integrator** (no Rapier/Cannon) | See §2.2. |
 | Audio | **Howler.js** (or raw WebAudio) | Sprite sheets, mobile unlock handling, pooled one-shots. |
 | UI | React + CSS modules (or Tailwind) | HUD/menus are DOM overlays above the canvas — crisper text, accessible, cheaper than in-scene text. |
+| Backend | **Supabase** (Auth + Postgres with row-level security) + **Vercel serverless functions** in `/api` | Optional accounts with guest play; cloud-saved stats/settings. Most reads/writes go direct from client via RLS; `/api` only for things needing server trust (e.g. stat validation, account deletion). |
+| Analytics | **Vercel Web Analytics** | Cookie-less. |
 | Testing | **Vitest** (engine, hit detection, physics), **Playwright** (smoke: app boots, a throw registers) | |
 | Tooling | pnpm, ESLint, Prettier, `@gltf-transform/cli`, `size-limit` | |
 
@@ -26,15 +28,19 @@ Status: **draft, awaiting confirmation of open decisions (§6)**. No application
 darts/
 ├─ .github/workflows/ci.yml        # typecheck, lint, test, build, size budget
 ├─ assets-src/                      # raw .blend/.glb/.png sources (Git LFS or kept out of repo)
+├─ api/                            # Vercel serverless functions (TypeScript)
+├─ supabase/                       # SQL migrations, RLS policies
 ├─ public/
 │  └─ assets/                       # OPTIMIZED, deployable assets only
 │     ├─ models/   *.glb            # meshopt + KTX2
 │     ├─ textures/ *.ktx2
 │     ├─ env/      studio_1k.hdr
 │     ├─ audio/    sfx.webm + sfx.mp3 (sprite)
+│     ├─ voice/<pack>/ caller sprite + manifest.json (swappable voice packs)
 │     └─ basis/ draco/              # decoder wasm (self-hosted)
 ├─ scripts/
-│  └─ optimize-assets.ts            # gltf-transform pipeline (assets-src -> public/assets)
+│  ├─ optimize-assets.ts            # gltf-transform pipeline (assets-src -> public/assets)
+│  └─ build-voice-pack.ts           # caller line list -> TTS -> audio sprite + manifest
 ├─ src/
 │  ├─ engine/                       # PURE TS — no React, no Three
 │  │  ├─ board/geometry.ts          # standard board dimensions, sector order
@@ -52,7 +58,8 @@ darts/
 │  │  ├─ input/useThrowGesture.ts   # pointer sampling
 │  │  └─ systems/FlightSystem.tsx   # useFrame-driven dart flight
 │  ├─ ui/{Hud,Menus,Scoreboard,Settings}.tsx
-│  ├─ audio/
+│  ├─ audio/                        # sfx + caller (voice-pack loader)
+│  ├─ services/                     # supabase client, auth, cloud sync
 │  ├─ store/                        # zustand slices
 │  └─ main.tsx
 ├─ tests/e2e/
@@ -61,7 +68,7 @@ darts/
 ```
 
 **Vercel-specific notes**
-- Pure static output → no function size limits apply; build is `pnpm build`, output `dist`.
+- Static output plus a few small Node functions in `/api` (well under function size limits); build is `pnpm build`, output `dist`. Supabase keys via Vercel env vars (anon key public, service-role key server-only).
 - Deployment upload limits and build time are non-issues if raw sources stay out of `public/`. Commit only optimized assets; keep raw sources in `assets-src/` under Git LFS (enable LFS in Vercel project settings, or exclude via `.vercelignore`).
 - `vercel.json` sets `Cache-Control: public, max-age=31536000, immutable` on `/assets/*` (filenames content-hashed by the optimize script) and the Vite `/assets` JS chunks.
 - Three.js is ~150 KB gz; code-split the 3D scene (`React.lazy`) so the menu paints instantly.
@@ -72,7 +79,7 @@ darts/
 
 ### 2.1 Throwing & input model
 
-Recommended model: **"aim, then flick"** — one model for mouse and touch, via Pointer Events.
+Confirmed model: **"aim, then flick"**, designed **mobile-first** (thumb-reachable controls, portrait and landscape layouts, touch tuning before mouse) — one model for mouse and touch, via Pointer Events.
 
 1. **Aim phase.** Pointer down anywhere = grab the dart. While held, moving the pointer moves the dart/aim reticle in screen space (with a sensitivity curve; fine-aim slows movement near rest). The reticle is the *intended* impact point at "perfect" power.
 2. **Flick phase.** Pull back slightly and push forward/up, then release. We keep a ring buffer of `{x, y, t}` samples (last ~100 ms, from `getCoalescedEvents()` for high-rate input).
@@ -124,7 +131,7 @@ Regulation radii (mm, to wire centre — configurable in `geometry.ts`):
 | Double | 162 – 170 |
 | Miss (off-score) | > 170 |
 
-**Wire bounce-outs**: wires have a half-width ≈ 0.6 mm (ring wires) / spider. If the dart point lands within `wireHalfWidth + tipRadius` of any ring radius or radial boundary, it's a *wire contact*. Then roll a seeded probability (scales with how centred on the wire and with entry angle; e.g. 25% at dead centre → 0% at edge, configurable or off). Bounce → dart falls with a short scripted animation, scores 0, counts as thrown. Non-bounce → deflected to the side the tip centre lies on.
+**Wire bounce-outs** (setting: **Realistic** default / **Low (≤10%)** / **Off**): wires have a half-width ≈ 0.6 mm (ring wires) / spider. If the dart point lands within `wireHalfWidth + tipRadius` of any ring radius or radial boundary, it's a *wire contact*. Then roll a seeded probability (scales with how centred on the wire and with entry angle; Realistic ≈ 25% at dead centre → 0% at edge; Low caps at 10%; Off always deflects). Bounce → dart falls with a short scripted animation, scores 0, counts as thrown. Non-bounce → deflected to the side the tip centre lies on.
 
 Output type: `{ kind: 'score', segment: 'T20', base: 20, multiplier: 3, points: 60, ring, sector, r, θ }` | `{ kind: 'bounce' }` | `{ kind: 'miss' }`.
 
@@ -154,7 +161,8 @@ interface GameMode<S> {
   Bust when: remaining < 0, remaining == 1 (double-out), or remaining == 0 without a double/inner-bull finish. On bust the turn's score reverts to the turn-start value and the turn ends immediately. Win on legal checkout. Legs/sets support (first to N legs). Stats: 3-dart average, checkout %, 180s.
 - **Cricket** — numbers 15–20 + bull. Single/double/treble = 1/2/3 marks; 3 marks closes. Marks beyond 3 on a number score points only if any opponent hasn't closed it. Win: all closed and points ≥ every opponent. Variant: cut-throat (later).
 - **Around the Clock** — hit 1→20 then bull in order; optional "doubles advance 2 / trebles advance 3". Great as the tutorial.
-- (Later) Practice/Free-throw with heatmap, Shanghai, Killer.
+- **Practice / free throw** — no rules, per-session hit heatmap and grouping stats; optional target drills.
+- (Later) Shanghai, Killer.
 
 ### 3.3 Turn/flow state machine (UI + camera layer)
 
@@ -169,7 +177,10 @@ Menu → MatchSetup → [LegStart]
 
 Implemented as a small typed FSM (hand-rolled, or XState if the graph grows); the engine reducer is called only at `Impact`.
 
-### 3.4 Camera transitions
+### 3.4 Camera transitions — **TV broadcast style**
+
+A `CameraDirector` picks shots from a small rig of named cameras (oche POV, side-on flight cam, low board cam, wide room shot, tight board close-up) with cuts and dolly moves like a TV broadcast. Slow-motion replays trigger on big moments (180, checkouts, bull finishes, bounce-outs). Every replay is skippable; **reduced motion** collapses to static POV + close-up cut. Mobile quality tier limits shot count/post-effects.
+
 
 | State | Camera |
 |---|---|
@@ -177,7 +188,8 @@ Implemented as a small typed FSM (hand-rolled, or XState if the graph grows); th
 | InFlight | Chase cam: spring-follow behind/above the dart, look-at blends from dart to board; slow-mo on near-boundary hits (optional). |
 | Impact | Close-up dolly to impact point (~0.35 m from board), hold, then return. |
 | TurnSummary | Board close-up framing all three darts. |
-| AI turn | Same pipeline, or a faster "TV" angle with skip button. |
+| AI turn | Broadcast angles (wide → board cam), skip/fast-forward button. |
+| Big moment | Slow-mo replay from an alternate angle (seeded flight re-simulated, so replays are exact). |
 
 All transitions via critically-damped springs (drei `CameraControls` or custom), interruptible, with a **"reduced motion"** setting that cuts instead of flies and skips follow-cam.
 
@@ -202,10 +214,11 @@ Each milestone ends deployed to a Vercel preview and merged to `main` (→ produ
 | **M3** | Feel & camera | Camera director (aim/follow/close-up), dart orientation + wobble, impact embed, wire bounce-outs, assist levels, tuning pass on gesture mapping. | Blind playtest: throws "feel fair". |
 | **M4** | AI opponents | Strategy + scatter model, 4 difficulty levels, sim-calibrated. | Averages within ±5 of targets. |
 | **M5** | More modes | Cricket, Around the Clock (as tutorial), match options (legs/sets), stats screen. | All modes covered by engine tests. |
-| **M6** | Audio | Throw whoosh, thud (varies by segment/wire), bounce clink, crowd/ambient bed, optional score caller sprite. Mobile audio unlock. | Audio toggles persist; no clipping/latency on iOS. |
-| **M7** | Environment & lighting | Pub/arena room GLB, HDRI, baked lightmaps / AO, board spotlight + soft shadows, quality tiers (`PerformanceMonitor` auto-downgrade). | ≥ 60 fps mid-range desktop, ≥ 30 fps on 3-yr-old phone; LCP < 2.5 s on 4G. |
+| **M6** | Audio + caller | Throw whoosh, thud (varies by segment/wire), bounce clink, crowd/ambient bed. **Voice caller**: pre-baked TTS pack (scores 0–180, "game shot", "no score", "bust", checkout requests "you require…") via `build-voice-pack.ts`; voice-pack manifest format so a custom recorded voice can be dropped in later. Mobile audio unlock. | Caller lines correct for every turn total; voice pack switchable. |
+| **M6.5** | Accounts & cloud save | Supabase Auth (email magic link + Google), optional sign-in with guest play; guest localStorage stats migrate on first sign-in; synced settings, match history, lifetime stats. RLS policies + migration tests. | Stats sync across two devices; guest flow untouched. |
+| **M7** | Environment & lighting + broadcast cams | Pub/arena room GLB, HDRI, full TV camera rig + slow-mo replays, baked lightmaps / AO, board spotlight + soft shadows, quality tiers (`PerformanceMonitor` auto-downgrade). | ≥ 60 fps mid-range desktop, ≥ 30 fps on 3-yr-old phone; LCP < 2.5 s on 4G. |
 | **M8** | Polish | Menus, settings, onboarding, accessibility (reduced motion, colour-blind board palette, remappable assist), PWA/offline, local stats persistence, analytics. | Lighthouse perf ≥ 85 mobile. |
-| M9+ | Optional | Online multiplayer, leaderboards, cosmetics (dart skins). | — |
+| M9+ | Optional | Online multiplayer, leaderboards (Supabase already in place), cosmetics, custom recorded voice pack. | — |
 
 ---
 
@@ -239,22 +252,22 @@ Vercel's Git integration handles deploys itself; CI only gates merges (no Vercel
 
 ---
 
-## 6. Open decisions (prioritized) — please confirm
+## 6. Confirmed decisions
 
-| # | Question | Impact | **Recommended default** |
-|---|---|---|---|
-| 1 | **Single-player vs. multiplayer scope** for v1? | Architecture (server, auth, netcode) | **Single-player vs AI + local hot-seat (2–4 players).** Keep engine deterministic/seeded so online can be added later without rewrites. |
-| 2 | **Art style & asset sourcing** | Load size, timeline, look | **Stylized-realistic, mostly procedural** (board generated in code, dart modelled simply in-house), plus one CC0 pub room + CC0 HDRI (Poly Haven) in M7. No paid assets. |
-| 3 | **Input model** | Core feel | **Aim-then-flick** (drag to aim, flick to throw) for both mouse and touch; click-hold power meter as an alternate setting. |
-| 4 | **Aim assist level default** | Accessibility vs. skill ceiling | **Three presets (Casual / Standard / Pro)**, default **Standard**: no trajectory line, moderate sweet-spot, mild launch correction. |
-| 5 | **Realism of wire bounce-outs** | Frustration vs. authenticity | **On, low probability (~10% max)**, toggle in settings. |
-| 6 | **Game modes for v1** | Scope | **501 (double-out), Cricket, Around the Clock**; 301/701 as x01 options. |
-| 7 | **Platform priority** | Input & perf tuning | **Desktop and mobile equally; mobile portrait supported**, landscape preferred. |
-| 8 | **Framework** | Dev speed | **Vite + React Three Fiber** (vs. plain Three.js or Next.js). |
-| 9 | **Camera style** | Motion sickness / spectacle | **Cinematic follow + close-up with "reduced motion" option**; skippable AI turns. |
-| 10 | **Sound & UI polish** | Timeline | **SFX + ambient bed in M6; no voice caller in v1** (add a synthesized/recorded caller later). |
-| 11 | **Persistence / accounts** | Backend needs | **None** — local stats in `localStorage`. No backend in v1. |
-| 12 | **Analytics** | Privacy | **Vercel Web Analytics** (cookie-less) only. |
-| 13 | **Package manager / repo** | Minor | **pnpm, single package** (no monorepo until a server exists). |
+| # | Decision | Answer |
+|---|---|---|
+| 1 | Who plays | Single-player vs AI + local hot-seat (2–4). Online later; engine stays deterministic. |
+| 2 | Art style | Stylized-realistic, mostly procedural; CC0 pub room + HDRI (Poly Haven). |
+| 3 | Input | Aim-then-flick; power-meter mode as a setting. |
+| 4 | Aim assist | Casual / Standard / Pro presets, Standard default. |
+| 5 | Wire bounce-outs | Realistic by default; settings: Low (≤10%) or Off. |
+| 6 | Modes (v1) | x01 (301/501/701), Cricket, Around the Clock, Practice/free throw. |
+| 7 | Devices | **Mobile first.** |
+| 8 | Framework | Vite + React Three Fiber. |
+| 9 | Camera | TV broadcast style (multi-angle, slow-mo replays), skippable, reduced-motion fallback. |
+| 10 | Audio | SFX + ambience + voice score caller; pre-baked AI TTS pack first, swappable for a custom recorded voice later. |
+| 11 | Saving | Optional accounts (guest play allowed) with cloud save via Supabase. |
+| 12 | Analytics | Vercel Web Analytics only. |
+| 13 | Repo | Single pnpm package + Vercel functions in `/api`. |
 
-Once these are confirmed (or adjusted), implementation starts at **M0 → M1**.
+Next step: **M0 → M1**.
