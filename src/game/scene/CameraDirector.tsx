@@ -131,7 +131,8 @@ export function CameraDirector() {
     }
     const cur = current.current;
     // Exponential smoothing (frame-rate independent); reduced motion and cuts snap.
-    const a = reduced || cut ? 1 : 1 - Math.exp(-RATE[phase] * Math.min(delta, 0.1));
+    const snap = reduced || cut || s.screen === 'menu'; // the menu renders on demand, so never ease there
+    const a = snap ? 1 : 1 - Math.exp(-RATE[phase] * Math.min(delta, 0.1));
     cur.pos.lerp(want.pos, a);
     cur.look.lerp(want.look, a);
     cur.half += (want.half - cur.half) * a;

@@ -1,10 +1,11 @@
-import { Canvas } from '@react-three/fiber';
+import { Canvas, useThree } from '@react-three/fiber';
 import { useEffect, useRef } from 'react';
 import { AI_SKILL } from '../engine/ai/skill';
 import { useGameAudio } from '../audio/useGameAudio';
 import { currentAi, useGameStore } from '../store/useGameStore';
 import { Hud } from '../ui/Hud';
 import { Menu } from '../ui/Menu';
+import { useKeyboardControls } from './input/useKeyboardControls';
 import { useThrowGesture } from './input/useThrowGesture';
 import { Board } from './scene/Board';
 import { CameraDirector } from './scene/CameraDirector';
@@ -46,6 +47,16 @@ function Darts() {
       )}
     </>
   );
+}
+
+/** Draw a fresh frame whenever we switch between menu and game (needed in demand mode). */
+function RenderOnScreenChange() {
+  const screen = useGameStore((s) => s.screen);
+  const invalidate = useThree((s) => s.invalidate);
+  useEffect(() => {
+    invalidate();
+  }, [screen, invalidate]);
+  return null;
 }
 
 function useImpactHold() {
@@ -91,9 +102,18 @@ export default function Game() {
   useImpactHold();
   useAiTurns();
   useGameAudio();
+  useKeyboardControls();
   return (
     <div className="game">
-      <Canvas shadows dpr={[1, 2]} gl={{ antialias: true }} camera={{ fov: 20 }}>
+      {/* The scene behind the menu is static: render on demand there to save battery. */}
+      <Canvas
+        shadows
+        dpr={[1, 2]}
+        gl={{ antialias: true }}
+        camera={{ fov: 20 }}
+        frameloop={screen === 'menu' ? 'demand' : 'always'}
+      >
+        <RenderOnScreenChange />
         <CameraDirector />
         <QualityGovernor />
         <Room />

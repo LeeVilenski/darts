@@ -84,7 +84,8 @@ export function useThrowGesture(el: RefObject<HTMLElement | null>) {
       record(e.clientX, e.clientY, e.timeStamp);
       const flick = analyzeFlick(trail, node.clientHeight || window.innerHeight);
       const store = useGameStore.getState();
-      if (!flick.isThrow) return;
+      // In power-meter mode dragging only aims; the Throw button throws.
+      if (!flick.isThrow || store.throwControl === 'meter') return;
       // Use the aim from just before the flick began, so the flick itself doesn't drag the aim.
       let aim = aimTrail[0] ?? { ...store.aim, t: 0 };
       for (const a of aimTrail) if (a.t < flick.flickStart) aim = a;

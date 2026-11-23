@@ -1,6 +1,6 @@
 import type { BounceSetting } from '../engine/board/resolveHit';
 import type { AssistLevel } from '../engine/physics/throwModel';
-import { useGameStore, type CameraStyle, type Quality } from '../store/useGameStore';
+import { useGameStore, type CameraStyle, type Quality, type Settings } from '../store/useGameStore';
 import { Segmented } from './Segmented';
 
 export function SettingsPanel() {
@@ -12,6 +12,8 @@ export function SettingsPanel() {
   const ambience = useGameStore((s) => s.ambience);
   const replays = useGameStore((s) => s.replays);
   const quality = useGameStore((s) => s.quality);
+  const throwControl = useGameStore((s) => s.throwControl);
+  const palette = useGameStore((s) => s.palette);
   const onOff = [
     { value: true, label: 'On' },
     { value: false, label: 'Off' },
@@ -28,6 +30,24 @@ export function SettingsPanel() {
           { value: 'pro', label: 'Pro' },
         ]}
         onChange={(v) => update({ assist: v })}
+      />
+      <Segmented<Settings['throwControl']>
+        label="Throwing"
+        value={throwControl}
+        options={[
+          { value: 'flick', label: 'Flick' },
+          { value: 'meter', label: 'Power meter' },
+        ]}
+        onChange={(v) => update({ throwControl: v })}
+      />
+      <Segmented<Settings['palette']>
+        label="Board colours"
+        value={palette}
+        options={[
+          { value: 'classic', label: 'Classic' },
+          { value: 'contrast', label: 'Colour-blind' },
+        ]}
+        onChange={(v) => update({ palette: v })}
       />
       <Segmented<BounceSetting>
         label="Bounce-outs"

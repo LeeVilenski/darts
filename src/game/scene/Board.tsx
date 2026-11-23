@@ -1,5 +1,6 @@
 import { useEffect, useMemo } from 'react';
 import { BOARD, WORLD } from '../../engine/board/geometry';
+import { useGameStore } from '../../store/useGameStore';
 import { createBoardTexture } from './boardTexture';
 
 const R = BOARD.boardRadius / 1000;
@@ -7,7 +8,8 @@ const DEPTH = 0.038;
 
 /** Procedural board: textured face at z = 0 plus a sisal-coloured edge and a foam surround. */
 export function Board() {
-  const texture = useMemo(() => createBoardTexture(), []);
+  const palette = useGameStore((s) => s.palette);
+  const texture = useMemo(() => createBoardTexture(palette), [palette]);
   useEffect(() => () => texture.dispose(), [texture]);
 
   return (

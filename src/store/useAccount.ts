@@ -11,7 +11,7 @@ import {
 } from '../services/cloud';
 import { planSync } from '../services/sync';
 import { useLifetimeStats } from './lifetimeStats';
-import { useGameStore, type Settings } from './useGameStore';
+import { SETTING_KEYS, useGameStore, type Settings } from './useGameStore';
 
 type SyncStatus = 'idle' | 'syncing' | 'synced' | 'error';
 
@@ -24,16 +24,6 @@ interface AccountState {
   signOut(): Promise<void>;
 }
 
-const SETTING_KEYS: (keyof Settings)[] = [
-  'assist',
-  'bounce',
-  'camera',
-  'sound',
-  'caller',
-  'ambience',
-  'replays',
-  'quality',
-];
 const pickSettings = (): Partial<Settings> => {
   const s = useGameStore.getState();
   return Object.fromEntries(SETTING_KEYS.map((k) => [k, s[k]])) as Partial<Settings>;

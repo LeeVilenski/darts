@@ -13,6 +13,7 @@ import { AccountPanel } from './AccountPanel';
 import { Segmented } from './Segmented';
 import { SettingsPanel } from './SettingsPanel';
 import { StatsSheet } from './StatsSheet';
+import { resetTutorial } from './Tutorial';
 
 type GameKind = GameSetup['kind'];
 const DEFAULT_PLAYERS: PlayerSetup[] =
@@ -234,6 +235,9 @@ export function Menu() {
           {showSettings ? 'Hide settings' : 'Settings'}
         </button>
         {showSettings && <SettingsPanel />}
+        <button type="button" className="ghost-btn" onClick={resetTutorial}>
+          Replay the tutorial next game
+        </button>
         <AccountPanel />
         <button
           type="button"

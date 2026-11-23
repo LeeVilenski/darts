@@ -1,7 +1,9 @@
 import { CanvasTexture, SRGBColorSpace } from 'three';
 import { BOARD, RING_WIRES, SECTORS, SECTOR_ANGLE } from '../../engine/board/geometry';
 
-const COLORS = {
+export type BoardPalette = 'classic' | 'contrast';
+
+const CLASSIC = {
   board: '#121212',
   dark: '#1b1b1b',
   light: '#efe2bf',
@@ -15,7 +17,11 @@ const COLORS = {
  * Paint the board face from the shared geometry. Canvas up = world up, so the
  * texture maps directly onto a CircleGeometry in the XY plane.
  */
-export function createBoardTexture(size = 2048): CanvasTexture {
+/** Colour-blind-safe variant: blue/orange rings, which stay distinct for red-green deficiencies. */
+const CONTRAST = { ...CLASSIC, red: '#1f6fd1', green: '#f08a1c' };
+
+export function createBoardTexture(palette: BoardPalette = 'classic', size = 2048): CanvasTexture {
+  const COLORS = palette === 'contrast' ? CONTRAST : CLASSIC;
   const canvas = document.createElement('canvas');
   canvas.width = canvas.height = size;
   const ctx = canvas.getContext('2d')!;

@@ -595,3 +595,83 @@ input {
 .replay-badge .rec {
   color: #ff3b3b;
 }
+
+/* ---------- polish ---------- */
+:focus-visible {
+  outline: 3px solid #7cc4ff;
+  outline-offset: 2px;
+}
+.power {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  pointer-events: none;
+}
+.meter {
+  position: relative;
+  width: min(280px, 70vw);
+  height: 14px;
+  border-radius: 999px;
+  overflow: hidden;
+  background: var(--panel);
+  border: 1px solid var(--line);
+}
+.meter .sweet {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  background: rgba(60, 207, 122, 0.45);
+}
+.meter .fill {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(90deg, #ffd166, var(--accent));
+  transform-origin: left;
+  animation: meter linear infinite alternate;
+  opacity: 0.85;
+}
+@keyframes meter {
+  from {
+    transform: scaleX(0);
+  }
+  to {
+    transform: scaleX(1);
+  }
+}
+.throw-btn {
+  pointer-events: auto;
+  touch-action: none;
+  min-width: 180px;
+  min-height: 56px;
+}
+.tutorial {
+  /* Touches pass through to the game (you aim by dragging anywhere); only the button is clickable. */
+  pointer-events: none;
+  max-width: 360px;
+  background: var(--panel-solid);
+  border: 1px solid var(--accent);
+  border-radius: 14px;
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  text-align: center;
+}
+.tutorial p {
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.4;
+}
+.tutorial-step {
+  font-size: 11px;
+  color: var(--accent);
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.tutorial .ghost-btn {
+  min-height: 36px;
+  font-size: 13px;
+  pointer-events: auto;
+}

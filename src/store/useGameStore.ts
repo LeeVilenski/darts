@@ -76,6 +76,10 @@ export interface Settings {
   ambience: boolean;
   replays: boolean;
   quality: Quality;
+  /** Flick gestures, or a hold-to-charge power meter (also used for keyboard play). */
+  throwControl: 'flick' | 'meter';
+  /** Board colours: classic red/green, or a colour-blind-safe blue/orange. */
+  palette: 'classic' | 'contrast';
 }
 
 interface GameState extends Settings {
@@ -105,6 +109,20 @@ interface GameState extends Settings {
 }
 
 const SETTINGS_KEY = 'darts.settings.v1';
+
+/** Every persisted (and cloud-synced) setting. */
+export const SETTING_KEYS: (keyof Settings)[] = [
+  'assist',
+  'bounce',
+  'camera',
+  'sound',
+  'caller',
+  'ambience',
+  'replays',
+  'quality',
+  'throwControl',
+  'palette',
+];
 const SETUP_KEY = 'darts.setup.v1';
 
 function readJson<T>(key: string): Partial<T> | null {
@@ -141,6 +159,8 @@ function loadSettings(): Settings {
     ambience: true,
     replays: true,
     quality: 'auto',
+    throwControl: 'flick',
+    palette: 'classic',
   };
   return { ...fallback, ...readJson<Settings>(SETTINGS_KEY) };
 }
@@ -312,8 +332,8 @@ export const useGameStore = create<GameState>((set, get) => ({
 
   updateSettings(patch) {
     set(patch);
-    const { assist, bounce, camera, sound, caller, ambience, replays, quality } = get();
-    const saved: Settings = { assist, bounce, camera, sound, caller, ambience, replays, quality };
+    const s = get();
+    const saved = Object.fromEntries(SETTING_KEYS.map((k) => [k, s[k]])) as unknown as Settings;
     writeJson(SETTINGS_KEY, saved);
   },
 }));
@@ -355,6 +375,6 @@ export function reseed(s: number) {
   rng = createRng(s);
 }
 
-if (import.meta.env.DEV) {
+if (import.meta.env.DEV && typeof window !== 'undefined') {
   (window as unknown as { __darts: typeof useGameStore }).__darts = useGameStore;
 }

@@ -1,6 +1,6 @@
 # 3D Darts — Implementation Plan
 
-Status: **M0–M7 complete** (… accounts, pub environment, broadcast cameras and replays). Next: M8 polish.
+Status: **M0–M8 complete.** Remaining optional work: online multiplayer, leaderboards, cosmetics, a recorded/TTS caller pack (docs/VOICE.md), and enabling Supabase (docs/ACCOUNTS.md) and Vercel Web Analytics.
 
 ---
 

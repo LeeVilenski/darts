@@ -6,6 +6,8 @@ import type { MatchState } from '../engine/modes/match';
 import { ASSIST } from '../engine/physics/throwModel';
 import { currentAi, DARTS_PER_TURN, useGameStore, type ThrownDart } from '../store/useGameStore';
 import { MatchOver } from './MatchOver';
+import { PowerMeter } from './PowerMeter';
+import { Tutorial } from './Tutorial';
 import { primaryValue, secondaryValue, turnHint, turnResult, turnTotal } from './modeView';
 import { SettingsPanel } from './SettingsPanel';
 
@@ -44,6 +46,8 @@ export function Hud() {
       <ScorePop />
       <ReplayBadge />
       <footer className="hud-bottom">
+        <Tutorial />
+        <PowerMeter />
         <Prompt />
         <SkipAi />
       </footer>
@@ -200,6 +204,7 @@ function Prompt() {
   const match = useGameStore((s) => s.match);
   const darts = useGameStore((s) => s.darts);
   const ai = useGameStore(currentAi);
+  const meter = useGameStore((s) => s.throwControl === 'meter');
   const name = match?.players[match.current]?.name;
   const multi = (match?.players.length ?? 1) > 1;
 
@@ -207,7 +212,8 @@ function Prompt() {
   if (ai && phase !== 'turnOver') {
     text = `${name} is throwing…`;
   } else if (phase === 'aiming') {
-    text = multi ? `${name} to throw · drag to aim, flick up` : 'Drag to aim · flick up to throw';
+    const how = meter ? 'drag to aim, hold Throw' : 'drag to aim, flick up';
+    text = multi ? `${name} to throw · ${how}` : how[0]!.toUpperCase() + how.slice(1);
   } else if (phase === 'turnOver') {
     if (!match) {
       text = `Turn total ${darts.reduce((s, d) => s + points(d), 0)} · tap to collect`;
