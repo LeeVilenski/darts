@@ -20,6 +20,21 @@ const RATE = { aiming: 4.5, flight: 9, impact: 5, replay: 7, turnOver: 4 } as co
 /** Side-on "TV" camera: off to the right of the throwing lane, tracking the dart. */
 const SIDE_X = 0.95;
 const SIDE_Y = 1.6;
+/**
+ * Fixed "board cam" like TV coverage: just off the board's right side, framed on
+ * where the dart will land, so you see it fly in and strike.
+ */
+const BOARD_CAM_DIR = new Vector3(0.6, 0.2, 1).normalize();
+const BOARD_CAM_DIST = 0.55;
+const BOARD_CAM_HALF = 0.115;
+/** In replays, switch from the side tracking shot to the board cam this close to the board (m). */
+const REPLAY_BOARD_CAM_Z = 0.6;
+
+/** Where a dart ends up on the board plane, or null if it never reached the board. */
+const landingPoint = (d: ThrownDart): Vector3 | null => {
+  const imp = d.flight.impact;
+  return imp ? new Vector3(imp.x, imp.y, 0) : null;
+};
 
 /**
  * A camera shot. Instead of a field of view we keep the half-extent to frame
@@ -50,7 +65,7 @@ export function CameraDirector() {
   const size = useThree((s) => s.size);
   const current = useRef<Shot | null>(null);
   const desired = useRef<Shot>({ pos: new Vector3(), look: new Vector3(), half: OCHE_HALF });
-  const lastShotKind = useRef<'side' | 'other'>('other');
+  const lastShotKind = useRef<'side' | 'board' | 'other'>('other');
 
   useFrame((_, delta) => {
     const s = useGameStore.getState();
@@ -78,24 +93,35 @@ export function CameraDirector() {
       want.half = 0.24;
     };
 
+    const boardCam = (focus: Vector3) => {
+      want.pos.copy(focus).addScaledVector(BOARD_CAM_DIR, BOARD_CAM_DIST);
+      want.look.copy(focus);
+      want.half = BOARD_CAM_HALF;
+    };
+
     const phase = s.screen === 'menu' ? 'aiming' : s.phase;
     const last = s.darts[s.darts.length - 1];
-    let shotKind: 'side' | 'other' = 'other';
+    const aiTurn = !reduced && currentAi(s) !== null;
+    let shotKind: 'side' | 'board' | 'other' = 'other';
     const replayDart = s.replay ? s.darts.find((d) => d.id === s.replay!.dartId) : undefined;
     if (phase === 'replay' && replayDart) {
       const end = replayDart.flight.samples[replayDart.flight.samples.length - 1]!.p;
       const p0 = replayDart.launch.p0;
       const tip =
         dartTracker.id === -replayDart.id ? dartTracker.position : new Vector3(p0.x, p0.y, p0.z);
-      side(tip, new Vector3(end.x, end.y, end.z));
-      shotKind = 'side';
-    } else if (phase === 'flight' && last && !reduced && currentAi(s)) {
-      // AI throws are shown like television coverage, from the side.
-      const end = last.flight.samples[last.flight.samples.length - 1]!.p;
-      const p0 = last.launch.p0;
-      const tip = dartTracker.id === last.id ? dartTracker.position : new Vector3(p0.x, p0.y, p0.z);
-      side(tip, new Vector3(end.x, end.y, end.z));
-      shotKind = 'side';
+      const land = landingPoint(replayDart);
+      // Track the dart from the side, then cut to the board cam for the strike.
+      if (land && tip.z < REPLAY_BOARD_CAM_Z) {
+        boardCam(land);
+        shotKind = 'board';
+      } else {
+        side(tip, new Vector3(end.x, end.y, end.z));
+        shotKind = 'side';
+      }
+    } else if ((phase === 'flight' || phase === 'impact') && last && aiTurn && landingPoint(last)) {
+      // AI throws: cut to the board cam on release and hold it through the strike.
+      boardCam(landingPoint(last)!);
+      shotKind = 'board';
     } else if (phase === 'flight' && last && !reduced) {
       const end = last.flight.samples[last.flight.samples.length - 1]!.p;
       const tip = dartTracker.id === last.id ? dartTracker.position : OCHE;
@@ -123,7 +149,7 @@ export function CameraDirector() {
       oche();
     }
 
-    // Cut (rather than fly) into and out of the side camera, like a TV director.
+    // Cut (rather than fly) between broadcast shots, like a TV director.
     const cut = shotKind !== lastShotKind.current;
     lastShotKind.current = shotKind;
     if (!current.current) {

@@ -75,6 +75,8 @@ const tmpQ = new Quaternion();
 const axisX = new Vector3(1, 0, 0);
 const axisZ = new Vector3(0, 0, 1);
 const EMBED = 0.007;
+/** Post-impact flutter of a stuck dart (rad, 1/s, Hz). */
+const QUIVER = { amplitude: 0.06, damping: 7, frequency: 16 } as const;
 
 type After = 'stick' | 'bounce' | 'floor';
 
@@ -152,7 +154,13 @@ export function FlyingDart({
         y: end.p.y + (v.y / len) * EMBED,
         z: end.p.z + (v.z / len) * EMBED,
       };
-      orient(g, p, v, 0, launch.spin * T);
+      // A stuck dart quivers briefly before settling.
+      const since = t - T;
+      const quiver =
+        QUIVER.amplitude *
+        Math.exp(-QUIVER.damping * since) *
+        Math.sin(2 * Math.PI * QUIVER.frequency * since);
+      orient(g, p, v, since < 1 ? quiver : 0, launch.spin * T);
       return;
     }
 
