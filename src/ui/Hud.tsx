@@ -1,11 +1,12 @@
 import { useState } from 'react';
 import type { HitResult } from '../engine/board/resolveHit';
-import { suggestCheckout } from '../engine/modes/checkouts';
-import { threeDartAverage, type X01State } from '../engine/modes/x01';
-import { ASSIST } from '../engine/physics/throwModel';
 import { AI_SKILL } from '../engine/ai/skill';
+import { CRICKET_TARGETS, type CricketState } from '../engine/modes/cricket';
+import type { MatchState } from '../engine/modes/match';
+import { ASSIST } from '../engine/physics/throwModel';
 import { currentAi, DARTS_PER_TURN, useGameStore, type ThrownDart } from '../store/useGameStore';
 import { MatchOver } from './MatchOver';
+import { primaryValue, secondaryValue, turnHint, turnResult, turnTotal } from './modeView';
 import { SettingsPanel } from './SettingsPanel';
 
 export const resultLabel = (r: HitResult) =>
@@ -36,6 +37,7 @@ export function Hud() {
           ☰
         </button>
         {match ? <Scoreboard match={match} /> : <PracticeCard />}
+        {match?.mode === 'cricket' && <CricketGrid match={match} />}
         <TurnStrip />
       </header>
       <ScorePop />
@@ -49,7 +51,7 @@ export function Hud() {
   );
 }
 
-function Scoreboard({ match }: { match: X01State }) {
+function Scoreboard({ match }: { match: MatchState }) {
   const setup = useGameStore((s) => s.setup);
   const multiLeg = match.options.legsToWin > 1;
   return (
@@ -57,15 +59,15 @@ function Scoreboard({ match }: { match: X01State }) {
       {match.players.map((p, i) => (
         <div key={i} className={`player-card${i === match.current ? ' active' : ''}`}>
           <div className="name">
-            {setup.kind === 'x01' && setup.players[i]?.ai && <span className="tag">AI</span>}
+            {setup.kind !== 'practice' && setup.players[i]?.ai && <span className="tag">AI</span>}
             {p.name}
           </div>
           <div className="remaining" data-testid={`remaining-${i}`}>
-            {p.remaining}
+            {primaryValue(match, i)}
           </div>
           <div className="meta">
             {multiLeg && <span>Legs {p.legsWon}</span>}
-            <span>Avg {threeDartAverage(p.stats).toFixed(1)}</span>
+            <span>{secondaryValue(match, i)}</span>
           </div>
         </div>
       ))}
@@ -73,8 +75,45 @@ function Scoreboard({ match }: { match: X01State }) {
   );
 }
 
+const MARK_SYMBOL = ['', '/', '✕', 'Ⓧ'];
+
+/** Cricket marks table: one row per player, one column per number. */
+function CricketGrid({ match }: { match: CricketState }) {
+  return (
+    <table className="cricket-grid" data-testid="cricket-grid">
+      <thead>
+        <tr>
+          <th />
+          {CRICKET_TARGETS.map((t) => (
+            <th
+              key={t}
+              scope="col"
+              className={match.players.every((p) => p.marks[t] >= 3) ? 'dead' : ''}
+            >
+              {t === 25 ? 'B' : t}
+            </th>
+          ))}
+        </tr>
+      </thead>
+      <tbody>
+        {match.players.map((p, i) => (
+          <tr key={i} className={i === match.current ? 'active' : ''}>
+            <th scope="row">{p.name}</th>
+            {CRICKET_TARGETS.map((t) => (
+              <td key={t} aria-label={`${p.marks[t]} marks on ${t === 25 ? 'bull' : t}`}>
+                {MARK_SYMBOL[p.marks[t]]}
+              </td>
+            ))}
+          </tr>
+        ))}
+      </tbody>
+    </table>
+  );
+}
+
 function PracticeCard() {
   const practice = useGameStore((s) => s.practice);
+  const reset = useGameStore((s) => s.resetPractice);
   const avg = practice.darts ? ((practice.points / practice.darts) * 3).toFixed(1) : '–';
   return (
     <div className="scoreboard">
@@ -86,6 +125,16 @@ function PracticeCard() {
           <span>Avg {avg}</span>
         </div>
       </div>
+      {practice.hits.length > 0 && (
+        <button
+          type="button"
+          className="ghost-btn clear-btn"
+          onPointerDown={(e) => e.stopPropagation()}
+          onClick={reset}
+        >
+          Clear heatmap
+        </button>
+      )}
     </div>
   );
 }
@@ -97,13 +146,8 @@ function TurnStrip() {
   const labels = match
     ? match.turn.darts.map((d) => d.label)
     : landed.map((d) => (d.result.kind === 'score' ? d.result.label : d.result.kind.toUpperCase()));
-  const total = match ? match.turn.points : landed.reduce((s, d) => s + points(d), 0);
-
-  let checkout: string[] | null = null;
-  if (match && match.status === 'open' && match.options.doubleOut) {
-    const p = match.players[match.current]!;
-    if (p.opened) checkout = suggestCheckout(p.remaining, DARTS_PER_TURN - match.turn.darts.length);
-  }
+  const total = match ? turnTotal(match) : String(landed.reduce((s, d) => s + points(d), 0));
+  const hint = match ? turnHint(match) : null;
 
   return (
     <div className="turn-strip">
@@ -114,12 +158,12 @@ function TurnStrip() {
           </span>
         ))}
         <span className="turn-total">
-          = <b data-testid="turn-total">{match?.status === 'bust' ? 'Bust' : total}</b>
+          = <b data-testid="turn-total">{total}</b>
         </span>
       </div>
-      {checkout && (
+      {hint && (
         <div className="checkout" data-testid="checkout">
-          Checkout: {checkout.map(chipLabel).join(' · ')}
+          {hint}
         </div>
       )}
     </div>
@@ -165,12 +209,12 @@ function Prompt() {
   } else if (phase === 'turnOver') {
     if (!match) {
       text = `Turn total ${darts.reduce((s, d) => s + points(d), 0)} · tap to collect`;
-    } else if (match.status === 'bust') {
+    } else if (match.mode === 'x01' && match.status === 'bust') {
       text = `Bust! ${name} stays on ${match.players[match.current]!.remaining} · tap to continue`;
     } else if (match.status === 'legWon') {
       text = `${name} wins leg ${match.leg}! · tap for the next leg`;
     } else if (match.status === 'complete') {
-      text = `${name} scored ${match.turn.points} · tap to collect`;
+      text = `${turnResult(match, name ?? '')} · tap to collect`;
     }
   }
   if (!text) return null;

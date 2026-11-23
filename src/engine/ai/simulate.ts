@@ -1,18 +1,12 @@
 import { resolveHit, type BounceSetting } from '../board/resolveHit';
 import { toDartScore } from '../modes/dart';
-import {
-  applyDart,
-  createX01,
-  DEFAULT_X01,
-  endTurn,
-  type X01Options,
-  type X01State,
-} from '../modes/x01';
+import { applyDart, createX01, DEFAULT_X01, endTurn, type X01Options } from '../modes/x01';
 import { simulateFlight, worldToBoardMm } from '../physics/ballistics';
 import { computeLaunch, PERFECT_FLICK, type LaunchParams } from '../physics/throwModel';
 import type { Rng } from '../rng';
 import { AI_SKILL, aiTuning, OUTLIER_FACTOR, type AiLevel } from './skill';
-import { chooseTarget, type AiTarget } from './strategy';
+import type { MatchState } from '../modes/match';
+import { chooseTargetFor, type AiTarget } from './strategy';
 
 export interface AiThrow {
   target: AiTarget;
@@ -20,9 +14,9 @@ export interface AiThrow {
 }
 
 /** Plan one AI dart: choose a target, then launch at it with the level's scatter. */
-export function planAiThrow(state: X01State, level: AiLevel, rng: Rng): AiThrow {
+export function planAiThrow(state: MatchState, level: AiLevel, rng: Rng): AiThrow {
   const skill = AI_SKILL[level];
-  const target = chooseTarget(state);
+  const target = chooseTargetFor(state);
   const sigma = rng.next() < skill.outlierChance ? skill.sigmaMm * OUTLIER_FACTOR : skill.sigmaMm;
   const launch = computeLaunch(target.point, PERFECT_FLICK, aiTuning(sigma), rng);
   return { target, launch };

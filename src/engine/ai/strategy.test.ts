@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import { scorePoint } from '../board/resolveHit';
 import { createX01, DEFAULT_X01, type X01State } from '../modes/x01';
-import { aimPointFor, chooseTarget } from './strategy';
+import { createAtc } from '../modes/aroundTheClock';
+import { createCricket } from '../modes/cricket';
+import { aimPointFor, chooseAtcTarget, chooseCricketTarget, chooseTarget } from './strategy';
 
 const on = (remaining: number, dartsThrown = 0, opts = DEFAULT_X01): X01State => {
   const s = createX01(['AI'], opts);
@@ -55,5 +57,45 @@ describe('chooseTarget', () => {
   it('finishes straight-out on a single segment', () => {
     expect(chooseTarget(on(19, 0, { ...DEFAULT_X01, doubleOut: false })).label).toBe('S19');
     expect(chooseTarget(on(57, 0, { ...DEFAULT_X01, doubleOut: false })).label).toBe('T19');
+  });
+});
+
+describe('cricket AI', () => {
+  it('closes the highest open number first', () => {
+    expect(chooseCricketTarget(createCricket(['AI', 'B'])).label).toBe('T20');
+    const s = createCricket(['AI', 'B']);
+    const closed20 = {
+      ...s,
+      players: s.players.map((p, i) => (i === 0 ? { ...p, marks: { ...p.marks, 20: 3 } } : p)),
+    };
+    expect(chooseCricketTarget(closed20).label).toBe('T19');
+  });
+  it('scores when behind on a number the opponent still has open', () => {
+    const s = createCricket(['AI', 'B']);
+    const behind = {
+      ...s,
+      players: s.players.map((p, i) =>
+        i === 0 ? { ...p, marks: { ...p.marks, 20: 3 } } : { ...p, points: 40 },
+      ),
+    };
+    expect(chooseCricketTarget(behind).label).toBe('T20');
+  });
+  it('goes for the bull last', () => {
+    const s = createCricket(['AI', 'B']);
+    const onlyBull = {
+      ...s,
+      players: s.players.map((p, i) =>
+        i === 0 ? { ...p, marks: { 20: 3, 19: 3, 18: 3, 17: 3, 16: 3, 15: 3, 25: 0 } } : p,
+      ),
+    };
+    expect(chooseCricketTarget(onlyBull).label).toBe('BULL');
+  });
+});
+
+describe('around the clock AI', () => {
+  it('aims at the next number, then the bull', () => {
+    const s = createAtc(['AI']);
+    expect(chooseAtcTarget(s).label).toBe('S1');
+    expect(chooseAtcTarget({ ...s, players: [{ ...s.players[0]!, next: 20 }] }).label).toBe('BULL');
   });
 });

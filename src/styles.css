@@ -469,3 +469,61 @@ input {
   background: var(--panel);
   border: 1px solid var(--line);
 }
+
+/* ---------- modes ---------- */
+.mode-blurb {
+  margin: -6px 0 0;
+  color: var(--muted);
+  font-size: 14px;
+}
+.cricket-grid {
+  background: var(--panel);
+  border-radius: 10px;
+  border-collapse: separate;
+  border-spacing: 0;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  overflow: hidden;
+}
+.cricket-grid th,
+.cricket-grid td {
+  padding: 2px 5px;
+  text-align: center;
+  min-width: 22px;
+}
+.cricket-grid thead th {
+  color: var(--muted);
+  font-weight: 700;
+}
+.cricket-grid thead th.dead {
+  text-decoration: line-through;
+  opacity: 0.4;
+}
+.cricket-grid tbody th {
+  text-align: left;
+  max-width: 70px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 500;
+  color: var(--muted);
+}
+.cricket-grid tbody tr.active th {
+  color: var(--accent);
+}
+.cricket-grid td {
+  font-weight: 800;
+  font-size: 14px;
+}
+.clear-btn {
+  pointer-events: auto;
+  min-height: 32px;
+  font-size: 12px;
+  padding: 0 10px;
+}
+.table-scroll {
+  overflow-x: auto;
+}
+.muted {
+  color: var(--muted);
+}

@@ -6,7 +6,8 @@ See [`docs/PLAN.md`](docs/PLAN.md) for the full implementation plan and mileston
 
 ## How to play
 
-- Pick a game in the menu: **501 / 301 / 701** (double-out or straight-out, optional double-in, 1–5 legs, up to 4 players passing one device, any of them AI opponents at Pub / Club / County / Pro level) or **Practice**.
+- Pick a game in the menu: **x01 (501 / 301 / 701)**, **Cricket**, **Around the Clock** (double-out or straight-out, optional double-in, 1–5 legs, up to 4 players passing one device, any of them AI opponents at Pub / Club / County / Pro level) or **Practice** (with a heatmap of where your darts land).
+- **Stats** in the menu keeps lifetime records for every human player on this device.
 - AI opponents play their own turns; tap **Skip** to fast-forward.
 - **Drag** anywhere to move the aim marker (it moves slower than your finger for fine control).
 - **Flick up and release** to throw. Flick speed sets the weight — too hard lands high, too soft lands low; tilting the flick pushes the dart sideways. Releasing slowly just finishes aiming.

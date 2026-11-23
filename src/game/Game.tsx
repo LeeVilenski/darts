@@ -8,6 +8,7 @@ import { useThrowGesture } from './input/useThrowGesture';
 import { Board } from './scene/Board';
 import { CameraDirector } from './scene/CameraDirector';
 import { FlyingDart } from './scene/Dart';
+import { Heatmap } from './scene/Heatmap';
 import { Reticle } from './scene/Reticle';
 import { Room } from './scene/Room';
 
@@ -74,6 +75,7 @@ export default function Game() {
           <>
             <Reticle />
             <Darts />
+            <Heatmap />
           </>
         )}
       </Canvas>

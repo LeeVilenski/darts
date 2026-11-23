@@ -1,5 +1,8 @@
 import { BOARD, pointInSector } from '../board/geometry';
 import { suggestCheckout } from '../modes/checkouts';
+import { atcTarget, type AtcState } from '../modes/aroundTheClock';
+import { CRICKET_TARGETS, type CricketState } from '../modes/cricket';
+import type { MatchState } from '../modes/match';
 import { DARTS_PER_TURN, type X01State } from '../modes/x01';
 
 export interface AiTarget {
@@ -106,4 +109,42 @@ export function chooseTarget(state: X01State): AiTarget {
   if (rem <= 20) return pick(`S${rem}`);
   const safe = SCORING.filter((l) => rem - value(l) >= 0);
   return pick(safe[0] ?? 'S1');
+}
+
+const pickLabel = (label: string): AiTarget => ({ label, point: aimPointFor(label) });
+const cricketLabel = (t: number) => (t === 25 ? 'BULL' : `T${t}`);
+
+/**
+ * Cricket: if behind on points and holding a number an opponent hasn't
+ * closed, score on it; otherwise close the highest number still open.
+ */
+export function chooseCricketTarget(state: CricketState): AiTarget {
+  const me = state.players[state.current]!;
+  const others = state.players.filter((_, i) => i !== state.current);
+  const open = (marks: Record<number, number>, t: number) => (marks[t] ?? 0) < 3;
+  const leader = Math.max(0, ...others.map((o) => o.points));
+  const scoring = CRICKET_TARGETS.find(
+    (t) => !open(me.marks, t) && others.some((o) => open(o.marks, t)),
+  );
+  if (scoring && me.points < leader) return pickLabel(cricketLabel(scoring));
+  const toClose = CRICKET_TARGETS.find((t) => open(me.marks, t));
+  if (toClose) return pickLabel(cricketLabel(toClose));
+  return pickLabel(cricketLabel(scoring ?? 20));
+}
+
+/** Around the Clock: the fat single of the next number (or the bull). */
+export function chooseAtcTarget(state: AtcState): AiTarget {
+  const t = atcTarget(state.players[state.current]!);
+  return pickLabel(t === 25 ? 'BULL' : `S${t}`);
+}
+
+export function chooseTargetFor(match: MatchState): AiTarget {
+  switch (match.mode) {
+    case 'x01':
+      return chooseTarget(match);
+    case 'cricket':
+      return chooseCricketTarget(match);
+    case 'atc':
+      return chooseAtcTarget(match);
+  }
 }

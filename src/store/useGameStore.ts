@@ -3,15 +3,12 @@ import { planAiThrow } from '../engine/ai/simulate';
 import type { AiLevel } from '../engine/ai/skill';
 import type { BounceSetting, HitResult } from '../engine/board/resolveHit';
 import { resolveHit } from '../engine/board/resolveHit';
+import { DEFAULT_ATC, type AtcOptions } from '../engine/modes/aroundTheClock';
+import { DEFAULT_CRICKET, type CricketOptions } from '../engine/modes/cricket';
 import { toDartScore } from '../engine/modes/dart';
-import {
-  applyDart,
-  createX01,
-  DEFAULT_X01,
-  endTurn,
-  type X01Options,
-  type X01State,
-} from '../engine/modes/x01';
+import { applyMatchDart, createMatch, endMatchTurn, type MatchState } from '../engine/modes/match';
+import { DEFAULT_X01, type X01Options } from '../engine/modes/x01';
+import { recordMatch } from './lifetimeStats';
 import { simulateFlight, worldToBoardMm, type Flight } from '../engine/physics/ballistics';
 import {
   computeLaunch,
@@ -49,7 +46,18 @@ export interface PlayerSetup {
 }
 
 export type GameSetup =
-  { kind: 'practice' } | { kind: 'x01'; options: X01Options; players: PlayerSetup[] };
+  | { kind: 'practice' }
+  | { kind: 'x01'; options: X01Options; players: PlayerSetup[] }
+  | { kind: 'cricket'; options: CricketOptions; players: PlayerSetup[] }
+  | { kind: 'atc'; options: AtcOptions; players: PlayerSetup[] };
+export type MatchSetup = Exclude<GameSetup, { kind: 'practice' }>;
+
+/** A dart's landing spot in Practice, for the heatmap (board mm). */
+export interface PracticeHit {
+  x: number;
+  y: number;
+}
+const MAX_PRACTICE_HITS = 400;
 
 export interface Settings {
   assist: AssistLevel;
@@ -60,12 +68,12 @@ export interface Settings {
 interface GameState extends Settings {
   screen: Screen;
   setup: GameSetup;
-  match: X01State | null;
+  match: MatchState | null;
   phase: Phase;
   /** Aim point in board-local millimetres. */
   aim: { x: number; y: number };
   darts: ThrownDart[];
-  practice: { darts: number; points: number };
+  practice: { darts: number; points: number; hits: PracticeHit[] };
   /** Speed up the current AI turn (skip button). */
   aiFast: boolean;
   startGame(setup: GameSetup): void;
@@ -77,6 +85,7 @@ interface GameState extends Settings {
   landDart(id: number): void;
   finishImpact(): void;
   collectDarts(): void;
+  resetPractice(): void;
   updateSettings(patch: Partial<Settings>): void;
 }
 
@@ -124,18 +133,39 @@ export const DEFAULT_SETUP: GameSetup = {
 export function loadSetup(): GameSetup {
   const saved = readJson<GameSetup>(SETUP_KEY) as GameSetup | null;
   if (saved?.kind === 'practice') return saved;
-  if (saved?.kind === 'x01' && Array.isArray(saved.players) && saved.players.length) {
-    return {
-      kind: 'x01',
-      options: { ...DEFAULT_X01, ...saved.options },
-      // Older saves stored plain names.
-      players: (saved.players as (PlayerSetup | string)[])
-        .slice(0, 4)
-        .map((p) => (typeof p === 'string' ? { name: p } : p)),
-    };
+  if (!saved || !('players' in saved) || !Array.isArray(saved.players) || !saved.players.length) {
+    return DEFAULT_SETUP;
   }
-  return DEFAULT_SETUP;
+  // Older saves stored plain names.
+  const players = (saved.players as (PlayerSetup | string)[])
+    .slice(0, 4)
+    .map((p) => (typeof p === 'string' ? { name: p } : p));
+  switch (saved.kind) {
+    case 'x01':
+      return { kind: 'x01', options: { ...DEFAULT_X01, ...saved.options }, players };
+    case 'cricket':
+      return { kind: 'cricket', options: { ...DEFAULT_CRICKET, ...saved.options }, players };
+    case 'atc':
+      return { kind: 'atc', options: { ...DEFAULT_ATC, ...saved.options }, players };
+    default:
+      return DEFAULT_SETUP;
+  }
 }
+
+function matchFor(setup: GameSetup): MatchState | null {
+  if (setup.kind === 'practice') return null;
+  const names = setup.players.map((p) => p.name);
+  switch (setup.kind) {
+    case 'x01':
+      return createMatch(names, { mode: 'x01', options: setup.options });
+    case 'cricket':
+      return createMatch(names, { mode: 'cricket', options: setup.options });
+    case 'atc':
+      return createMatch(names, { mode: 'atc', options: setup.options });
+  }
+}
+
+const emptyPractice = () => ({ darts: 0, points: 0, hits: [] as PracticeHit[] });
 
 const AIM_LIMIT_MM = 260;
 const START_AIM = { x: 0, y: 103 }; // treble 20
@@ -158,7 +188,7 @@ export const useGameStore = create<GameState>((set, get) => ({
   phase: 'aiming',
   aim: START_AIM,
   darts: [],
-  practice: { darts: 0, points: 0 },
+  practice: emptyPractice(),
   aiFast: false,
 
   startGame(setup) {
@@ -166,18 +196,12 @@ export const useGameStore = create<GameState>((set, get) => ({
     set({
       screen: 'game',
       setup,
-      match:
-        setup.kind === 'x01'
-          ? createX01(
-              setup.players.map((p) => p.name),
-              setup.options,
-            )
-          : null,
+      match: matchFor(setup),
       aiFast: false,
       phase: 'aiming',
       aim: START_AIM,
       darts: [],
-      practice: { darts: 0, points: 0 },
+      practice: emptyPractice(),
     });
   },
 
@@ -217,15 +241,21 @@ export const useGameStore = create<GameState>((set, get) => ({
     vibrate(dart.result.kind === 'bounce' ? 30 : 12);
 
     if (s.match) {
-      const match = applyDart(s.match, toDartScore(dart.result));
+      const match = applyMatchDart(s.match, toDartScore(dart.result));
+      if (match.status === 'matchWon' && s.setup.kind !== 'practice')
+        recordMatch(match, s.setup.players);
       set({ darts, match, phase: match.status === 'open' ? 'impact' : 'turnOver' });
       return;
     }
     const points = dart.result.kind === 'score' ? dart.result.points : 0;
+    const imp = dart.flight.impact;
+    const hits = imp
+      ? [...s.practice.hits, worldToBoardMm(imp)].slice(-MAX_PRACTICE_HITS)
+      : s.practice.hits;
     set({
       darts,
       phase: darts.length >= DARTS_PER_TURN ? 'turnOver' : 'impact',
-      practice: { darts: s.practice.darts + 1, points: s.practice.points + points },
+      practice: { darts: s.practice.darts + 1, points: s.practice.points + points, hits },
     });
   },
 
@@ -236,7 +266,16 @@ export const useGameStore = create<GameState>((set, get) => ({
   collectDarts() {
     const s = get();
     if (s.phase !== 'turnOver' || s.match?.status === 'matchWon') return;
-    set({ darts: [], phase: 'aiming', match: s.match ? endTurn(s.match) : null, aiFast: false });
+    set({
+      darts: [],
+      phase: 'aiming',
+      match: s.match ? endMatchTurn(s.match) : null,
+      aiFast: false,
+    });
+  },
+
+  resetPractice() {
+    set({ practice: emptyPractice() });
   },
 
   updateSettings(patch) {
@@ -266,7 +305,7 @@ function launchDart(aim: { x: number; y: number }, launch: LaunchParams) {
 
 /** AI level of the player whose turn it is, or null for a human / practice. */
 export function currentAi(s: Pick<GameState, 'setup' | 'match'>): AiLevel | null {
-  if (s.setup.kind !== 'x01' || !s.match) return null;
+  if (s.setup.kind === 'practice' || !s.match) return null;
   return s.setup.players[s.match.current]?.ai ?? null;
 }
 

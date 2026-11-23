@@ -1,4 +1,5 @@
 import { isDouble, type DartScore } from './dart';
+import { nextTurn, type TurnStatus } from './types';
 
 export interface X01Options {
   startScore: 301 | 501 | 701;
@@ -42,14 +43,10 @@ export interface X01Turn {
   points: number;
 }
 
-/**
- * open: player is still throwing this turn.
- * bust / complete / legWon / matchWon: turn finished; call endTurn() to move on
- * (matchWon is terminal).
- */
-export type TurnStatus = 'open' | 'bust' | 'complete' | 'legWon' | 'matchWon';
+export type { TurnStatus } from './types';
 
 export interface X01State {
+  mode: 'x01';
   options: X01Options;
   players: X01Player[];
   current: number;
@@ -89,6 +86,7 @@ export function createX01(names: string[], options: X01Options = DEFAULT_X01): X
     stats: emptyStats(),
   }));
   return {
+    mode: 'x01',
     options,
     players,
     current: 0,
@@ -181,26 +179,15 @@ export function applyDart(s: X01State, dart: DartScore): X01State {
 
 /** Finish the current turn: next player, or next leg after a leg win. */
 export function endTurn(s: X01State): X01State {
-  if (s.status === 'open' || s.status === 'matchWon') return s;
-  if (s.status === 'legWon') {
-    const legStarter = (s.legStarter + 1) % s.players.length;
-    const players = s.players.map((p) => ({
-      ...p,
-      remaining: s.options.startScore,
-      opened: !s.options.doubleIn,
-    }));
-    return {
-      ...s,
-      players,
-      leg: s.leg + 1,
-      legStarter,
-      current: legStarter,
-      turn: newTurn(legStarter, s.options.startScore),
-      status: 'open',
-    };
-  }
-  const next = (s.current + 1) % s.players.length;
-  return { ...s, current: next, turn: newTurn(next, s.players[next]!.remaining), status: 'open' };
+  const next = nextTurn(
+    s,
+    (player) => newTurn(player, s.players[player]!.remaining),
+    (p) => ({ ...p, remaining: s.options.startScore, opened: !s.options.doubleIn }),
+  );
+  // A new leg resets everyone's score, so the new turn must start from the reset score.
+  return next.status === 'open' && next.leg !== s.leg
+    ? { ...next, turn: newTurn(next.current, s.options.startScore) }
+    : next;
 }
 
 /** Three-dart average. */
