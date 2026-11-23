@@ -1,0 +1,4 @@
+[
+  { "name": "initial JS (brotli)", "path": "dist/assets/index-*.js", "limit": "120 KB" },
+  { "name": "3D scene chunk (brotli)", "path": "dist/assets/Game-*.js", "limit": "350 KB" }
+]
