@@ -48,6 +48,14 @@ export const NOMINAL_FLIGHT_TIME = 0.38;
 /** Flick speed (viewport heights per second) that produces a perfectly weighted throw. */
 export const IDEAL_FLICK_SPEED = 2.4;
 
+/** A flick at exactly the sweet-spot speed, straight up (used by the AI). */
+export const PERFECT_FLICK: FlickMetrics = {
+  speed: IDEAL_FLICK_SPEED,
+  angle: 0,
+  unsteadiness: 0,
+  curvature: 0,
+};
+
 export interface FlickMetrics {
   /** Flick speed in viewport heights / second. */
   speed: number;
@@ -76,10 +84,10 @@ const clamp = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v
 export function computeLaunch(
   aimMm: { x: number; y: number },
   flick: FlickMetrics,
-  assist: AssistLevel,
+  assist: AssistLevel | AssistTuning,
   rng: Rng,
 ): LaunchParams {
-  const tune = ASSIST[assist];
+  const tune = typeof assist === 'string' ? ASSIST[assist] : assist;
   const sigma = tune.scatterMm + tune.unsteadyScatterMm * clamp(flick.unsteadiness, 0, 1);
   const target = boardMmToWorld(aimMm.x + rng.gaussian() * sigma, aimMm.y + rng.gaussian() * sigma);
   const ideal = idealLaunch(RELEASE_POINT, target, NOMINAL_FLIGHT_TIME);

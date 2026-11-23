@@ -428,3 +428,44 @@ input {
   color: var(--muted);
   font-weight: 500;
 }
+
+/* ---------- AI ---------- */
+.tag {
+  display: inline-block;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  background: var(--accent);
+  color: #111;
+  border-radius: 4px;
+  padding: 1px 4px;
+  margin-right: 4px;
+  vertical-align: 1px;
+}
+.player-row .tag {
+  align-self: center;
+  margin: 0;
+}
+.player-slot {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.segmented.small button {
+  min-height: 34px;
+  padding: 6px 4px;
+  font-size: 13px;
+}
+.add-row {
+  display: flex;
+  gap: 8px;
+}
+.add-row .ghost-btn {
+  flex: 1;
+}
+.skip-btn {
+  pointer-events: auto;
+  min-height: 40px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+}

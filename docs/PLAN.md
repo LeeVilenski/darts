@@ -1,6 +1,6 @@
 # 3D Darts — Implementation Plan
 
-Status: **M0–M3 complete** (scaffold/CI, playable prototype, x01 matches, camera director). Next: M4 AI opponents.
+Status: **M0–M4 complete** (scaffold/CI, playable prototype, x01 matches, camera director, AI opponents). Next: M5 more modes.
 
 ---
 

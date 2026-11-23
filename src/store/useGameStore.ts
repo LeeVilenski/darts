@@ -1,4 +1,6 @@
 import { create } from 'zustand';
+import { planAiThrow } from '../engine/ai/simulate';
+import type { AiLevel } from '../engine/ai/skill';
 import type { BounceSetting, HitResult } from '../engine/board/resolveHit';
 import { resolveHit } from '../engine/board/resolveHit';
 import { toDartScore } from '../engine/modes/dart';
@@ -40,8 +42,14 @@ export type Phase = 'aiming' | 'flight' | 'impact' | 'turnOver';
 export type Screen = 'menu' | 'game';
 export type CameraStyle = 'cinematic' | 'reduced';
 
+/** A seat at the oche: a person, or an AI opponent at the given level. */
+export interface PlayerSetup {
+  name: string;
+  ai?: AiLevel;
+}
+
 export type GameSetup =
-  { kind: 'practice' } | { kind: 'x01'; options: X01Options; players: string[] };
+  { kind: 'practice' } | { kind: 'x01'; options: X01Options; players: PlayerSetup[] };
 
 export interface Settings {
   assist: AssistLevel;
@@ -58,10 +66,14 @@ interface GameState extends Settings {
   aim: { x: number; y: number };
   darts: ThrownDart[];
   practice: { darts: number; points: number };
+  /** Speed up the current AI turn (skip button). */
+  aiFast: boolean;
   startGame(setup: GameSetup): void;
   quitToMenu(): void;
   setAim(aim: { x: number; y: number }): void;
   throwDart(aim: { x: number; y: number }, flick: FlickMetrics): void;
+  aiThrow(): void;
+  setAiFast(fast: boolean): void;
   landDart(id: number): void;
   finishImpact(): void;
   collectDarts(): void;
@@ -107,7 +119,7 @@ function loadSettings(): Settings {
 export const DEFAULT_SETUP: GameSetup = {
   kind: 'x01',
   options: DEFAULT_X01,
-  players: ['Player 1'],
+  players: [{ name: 'Player 1' }, { name: 'Club Bot', ai: 'club' }],
 };
 export function loadSetup(): GameSetup {
   const saved = readJson<GameSetup>(SETUP_KEY) as GameSetup | null;
@@ -116,7 +128,10 @@ export function loadSetup(): GameSetup {
     return {
       kind: 'x01',
       options: { ...DEFAULT_X01, ...saved.options },
-      players: saved.players.slice(0, 4),
+      // Older saves stored plain names.
+      players: (saved.players as (PlayerSetup | string)[])
+        .slice(0, 4)
+        .map((p) => (typeof p === 'string' ? { name: p } : p)),
     };
   }
   return DEFAULT_SETUP;
@@ -144,13 +159,21 @@ export const useGameStore = create<GameState>((set, get) => ({
   aim: START_AIM,
   darts: [],
   practice: { darts: 0, points: 0 },
+  aiFast: false,
 
   startGame(setup) {
     writeJson(SETUP_KEY, setup);
     set({
       screen: 'game',
       setup,
-      match: setup.kind === 'x01' ? createX01(setup.players, setup.options) : null,
+      match:
+        setup.kind === 'x01'
+          ? createX01(
+              setup.players.map((p) => p.name),
+              setup.options,
+            )
+          : null,
+      aiFast: false,
       phase: 'aiming',
       aim: START_AIM,
       darts: [],
@@ -170,21 +193,20 @@ export const useGameStore = create<GameState>((set, get) => ({
 
   throwDart(aim, flick) {
     const s = get();
-    if (s.phase !== 'aiming' || s.darts.length >= DARTS_PER_TURN) return;
-    const launch = computeLaunch(aim, flick, s.assist, rng);
-    const flight = simulateFlight(launch.p0, launch.v0);
-    let result: HitResult;
-    if (flight.impact) {
-      const mm = worldToBoardMm(flight.impact);
-      result = resolveHit(mm.x, mm.y, rng, s.bounce);
-    } else {
-      result = { kind: 'miss', r: Infinity, angle: 0 };
-    }
-    set({
-      phase: 'flight',
-      aim,
-      darts: [...s.darts, { id: nextId++, launch, flight, result, landed: false }],
-    });
+    if (s.phase !== 'aiming' || s.darts.length >= DARTS_PER_TURN || currentAi(s)) return;
+    launchDart(aim, computeLaunch(aim, flick, s.assist, rng));
+  },
+
+  aiThrow() {
+    const s = get();
+    const level = currentAi(s);
+    if (!level || !s.match || s.phase !== 'aiming' || s.match.status !== 'open') return;
+    const { target, launch } = planAiThrow(s.match, level, rng);
+    launchDart(target.point, launch);
+  },
+
+  setAiFast(aiFast) {
+    set({ aiFast });
   },
 
   landDart(id) {
@@ -214,7 +236,7 @@ export const useGameStore = create<GameState>((set, get) => ({
   collectDarts() {
     const s = get();
     if (s.phase !== 'turnOver' || s.match?.status === 'matchWon') return;
-    set({ darts: [], phase: 'aiming', match: s.match ? endTurn(s.match) : null });
+    set({ darts: [], phase: 'aiming', match: s.match ? endTurn(s.match) : null, aiFast: false });
   },
 
   updateSettings(patch) {
@@ -223,6 +245,30 @@ export const useGameStore = create<GameState>((set, get) => ({
     writeJson(SETTINGS_KEY, { assist, bounce, camera });
   },
 }));
+
+/** Fly a launched dart: precompute its flight and result, then animate it. */
+function launchDart(aim: { x: number; y: number }, launch: LaunchParams) {
+  const s = useGameStore.getState();
+  const flight = simulateFlight(launch.p0, launch.v0);
+  let result: HitResult;
+  if (flight.impact) {
+    const mm = worldToBoardMm(flight.impact);
+    result = resolveHit(mm.x, mm.y, rng, s.bounce);
+  } else {
+    result = { kind: 'miss', r: Infinity, angle: 0 };
+  }
+  useGameStore.setState({
+    phase: 'flight',
+    aim,
+    darts: [...s.darts, { id: nextId++, launch, flight, result, landed: false }],
+  });
+}
+
+/** AI level of the player whose turn it is, or null for a human / practice. */
+export function currentAi(s: Pick<GameState, 'setup' | 'match'>): AiLevel | null {
+  if (s.setup.kind !== 'x01' || !s.match) return null;
+  return s.setup.players[s.match.current]?.ai ?? null;
+}
 
 /** Reset the RNG (tests / future replays). */
 export function reseed(s: number) {

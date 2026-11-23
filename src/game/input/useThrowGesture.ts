@@ -1,6 +1,6 @@
 import { useEffect, type RefObject } from 'react';
 import { analyzeFlick, type PointerSample } from '../../engine/physics/gesture';
-import { useGameStore } from '../../store/useGameStore';
+import { currentAi, useGameStore } from '../../store/useGameStore';
 import { visibleHalfHeight } from '../scene/camera';
 
 /** Aim moves slower than the finger for fine control (fraction of 1:1 on-screen mapping). */
@@ -49,6 +49,8 @@ export function useThrowGesture(el: RefObject<HTMLElement | null>) {
         store.collectDarts();
         return;
       }
+      // The AI throws its own darts; tapping can still collect them (above).
+      if (currentAi(store)) return;
       // Touching during the impact close-up skips it and starts aiming straight away.
       if (store.phase === 'impact') store.finishImpact();
       store = useGameStore.getState();

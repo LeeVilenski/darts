@@ -3,7 +3,8 @@ import type { HitResult } from '../engine/board/resolveHit';
 import { suggestCheckout } from '../engine/modes/checkouts';
 import { threeDartAverage, type X01State } from '../engine/modes/x01';
 import { ASSIST } from '../engine/physics/throwModel';
-import { DARTS_PER_TURN, useGameStore, type ThrownDart } from '../store/useGameStore';
+import { AI_SKILL } from '../engine/ai/skill';
+import { currentAi, DARTS_PER_TURN, useGameStore, type ThrownDart } from '../store/useGameStore';
 import { MatchOver } from './MatchOver';
 import { SettingsPanel } from './SettingsPanel';
 
@@ -40,6 +41,7 @@ export function Hud() {
       <ScorePop />
       <footer className="hud-bottom">
         <Prompt />
+        <SkipAi />
       </footer>
       {match?.status === 'matchWon' && <MatchOver match={match} />}
       {menuOpen && <PauseSheet onClose={() => setMenuOpen(false)} />}
@@ -48,12 +50,16 @@ export function Hud() {
 }
 
 function Scoreboard({ match }: { match: X01State }) {
+  const setup = useGameStore((s) => s.setup);
   const multiLeg = match.options.legsToWin > 1;
   return (
     <div className="scoreboard" data-testid="scoreboard">
       {match.players.map((p, i) => (
         <div key={i} className={`player-card${i === match.current ? ' active' : ''}`}>
-          <div className="name">{p.name}</div>
+          <div className="name">
+            {setup.kind === 'x01' && setup.players[i]?.ai && <span className="tag">AI</span>}
+            {p.name}
+          </div>
           <div className="remaining" data-testid={`remaining-${i}`}>
             {p.remaining}
           </div>
@@ -147,11 +153,14 @@ function Prompt() {
   const phase = useGameStore((s) => s.phase);
   const match = useGameStore((s) => s.match);
   const darts = useGameStore((s) => s.darts);
+  const ai = useGameStore(currentAi);
   const name = match?.players[match.current]?.name;
   const multi = (match?.players.length ?? 1) > 1;
 
   let text: string | null = null;
-  if (phase === 'aiming') {
+  if (ai && phase !== 'turnOver') {
+    text = `${name} is throwing…`;
+  } else if (phase === 'aiming') {
     text = multi ? `${name} to throw · drag to aim, flick up` : 'Drag to aim · flick up to throw';
   } else if (phase === 'turnOver') {
     if (!match) {
@@ -169,6 +178,27 @@ function Prompt() {
     <div className={`prompt${phase === 'turnOver' ? ' strong' : ''}`} data-testid="prompt">
       {text}
     </div>
+  );
+}
+
+/** Fast-forward button shown while an AI opponent is throwing. */
+function SkipAi() {
+  const ai = useGameStore(currentAi);
+  const fast = useGameStore((s) => s.aiFast);
+  const matchWon = useGameStore((s) => s.match?.status === 'matchWon');
+  const setAiFast = useGameStore((s) => s.setAiFast);
+  if (!ai || fast || matchWon) return null;
+  return (
+    <button
+      type="button"
+      className="ghost-btn skip-btn"
+      data-testid="skip-ai"
+      aria-label={`Skip ${AI_SKILL[ai].label} opponent's turn animation`}
+      onPointerDown={(e) => e.stopPropagation()}
+      onClick={() => setAiFast(true)}
+    >
+      Skip ▸▸
+    </button>
   );
 }
 

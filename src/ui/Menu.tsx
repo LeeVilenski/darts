@@ -1,10 +1,18 @@
 import { useState } from 'react';
+import { AI_LEVELS, AI_SKILL, type AiLevel } from '../engine/ai/skill';
 import { DEFAULT_X01, type X01Options } from '../engine/modes/x01';
-import { useGameStore, type GameSetup } from '../store/useGameStore';
+import {
+  DEFAULT_SETUP,
+  useGameStore,
+  type GameSetup,
+  type PlayerSetup,
+} from '../store/useGameStore';
 import { Segmented } from './Segmented';
 import { SettingsPanel } from './SettingsPanel';
 
 type GameKind = 301 | 501 | 701 | 'practice';
+const DEFAULT_PLAYERS: PlayerSetup[] = DEFAULT_SETUP.kind === 'x01' ? DEFAULT_SETUP.players : [];
+const botName = (level: AiLevel) => `${AI_SKILL[level].label} Bot`;
 const MAX_PLAYERS = 4;
 
 export function Menu() {
@@ -16,12 +24,14 @@ export function Menu() {
   const [options, setOptions] = useState<X01Options>(
     saved.kind === 'x01' ? saved.options : DEFAULT_X01,
   );
-  const [players, setPlayers] = useState<string[]>(
-    saved.kind === 'x01' ? saved.players : ['Player 1'],
+  const [players, setPlayers] = useState<PlayerSetup[]>(
+    saved.kind === 'x01' ? saved.players : DEFAULT_PLAYERS,
   );
   const [showSettings, setShowSettings] = useState(false);
 
   const patch = (p: Partial<X01Options>) => setOptions((o) => ({ ...o, ...p }));
+  const update = (i: number, p: Partial<PlayerSetup>) =>
+    setPlayers((ps) => ps.map((x, j) => (j === i ? { ...x, ...p } : x)));
   const start = () => {
     const setup: GameSetup =
       kind === 'practice'
@@ -29,7 +39,10 @@ export function Menu() {
         : {
             kind: 'x01',
             options: { ...options, startScore: kind },
-            players: players.map((n, i) => n.trim() || `Player ${i + 1}`),
+            players: players.map((p, i) => ({
+              ...p,
+              name: p.name.trim() || (p.ai ? botName(p.ai) : `Player ${i + 1}`),
+            })),
           };
     startGame(setup);
   };
@@ -84,36 +97,80 @@ export function Menu() {
             <div className="field">
               <span className="field-label">Players</span>
               <div className="players">
-                {players.map((name, i) => (
-                  <div className="player-row" key={i}>
-                    <input
-                      aria-label={`Player ${i + 1} name`}
-                      value={name}
-                      maxLength={16}
-                      onChange={(e) =>
-                        setPlayers((ps) => ps.map((p, j) => (j === i ? e.target.value : p)))
-                      }
-                    />
-                    {players.length > 1 && (
-                      <button
-                        type="button"
-                        className="icon-btn"
-                        aria-label={`Remove ${name || `player ${i + 1}`}`}
-                        onClick={() => setPlayers((ps) => ps.filter((_, j) => j !== i))}
+                {players.map((p, i) => (
+                  <div className="player-slot" key={i}>
+                    <div className="player-row">
+                      {p.ai && <span className="tag">AI</span>}
+                      <input
+                        aria-label={`Player ${i + 1} name`}
+                        value={p.name}
+                        maxLength={16}
+                        onChange={(e) => update(i, { name: e.target.value })}
+                      />
+                      {players.length > 1 && (
+                        <button
+                          type="button"
+                          className="icon-btn"
+                          aria-label={`Remove ${p.name || `player ${i + 1}`}`}
+                          onClick={() => setPlayers((ps) => ps.filter((_, j) => j !== i))}
+                        >
+                          ×
+                        </button>
+                      )}
+                    </div>
+                    {p.ai && (
+                      <div
+                        className="segmented small"
+                        role="radiogroup"
+                        aria-label={`${p.name} level`}
                       >
-                        ×
-                      </button>
+                        {AI_LEVELS.map((level) => (
+                          <button
+                            key={level}
+                            type="button"
+                            role="radio"
+                            aria-checked={p.ai === level}
+                            className={p.ai === level ? 'on' : ''}
+                            onClick={() =>
+                              // Keep auto-generated names in step with the level.
+                              update(i, {
+                                ai: level,
+                                name: p.name === botName(p.ai!) ? botName(level) : p.name,
+                              })
+                            }
+                          >
+                            {AI_SKILL[level].label}
+                          </button>
+                        ))}
+                      </div>
                     )}
                   </div>
                 ))}
                 {players.length < MAX_PLAYERS && (
-                  <button
-                    type="button"
-                    className="ghost-btn"
-                    onClick={() => setPlayers((ps) => [...ps, `Player ${ps.length + 1}`])}
-                  >
-                    + Add player
-                  </button>
+                  <div className="add-row">
+                    <button
+                      type="button"
+                      className="ghost-btn"
+                      onClick={() =>
+                        setPlayers((ps) => [
+                          ...ps,
+                          { name: `Player ${ps.filter((x) => !x.ai).length + 1}` },
+                        ])
+                      }
+                    >
+                      + Player
+                    </button>
+                    <button
+                      type="button"
+                      className="ghost-btn"
+                      data-testid="add-ai"
+                      onClick={() =>
+                        setPlayers((ps) => [...ps, { name: botName('club'), ai: 'club' }])
+                      }
+                    >
+                      + AI opponent
+                    </button>
+                  </div>
                 )}
               </div>
             </div>
