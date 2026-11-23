@@ -15,6 +15,7 @@ import { WORLD } from '../../engine/board/geometry';
 import { GRAVITY, sampleFlight, type Vec3 } from '../../engine/physics/ballistics';
 import { useGameStore, type ThrownDart } from '../../store/useGameStore';
 import { STICK_RADIUS } from './Board';
+import { dartTracker } from './dartTracker';
 
 // Shared geometry/materials. Dart tip at local origin, body along -Z.
 const TIP_LEN = 0.032;
@@ -111,6 +112,8 @@ export function FlyingDart({ dart }: { dart: ThrownDart }) {
           Math.sin(2 * Math.PI * launch.wobble.frequency * t),
         launch.spin * t,
       );
+      dartTracker.id = dart.id;
+      dartTracker.position.set(s.p.x, s.p.y, s.p.z);
       return;
     }
 

@@ -1,6 +1,6 @@
 # 3D Darts — Implementation Plan
 
-Status: **decisions confirmed (§6)** — ready to start M0. No application code yet.
+Status: **M0–M3 complete** (scaffold/CI, playable prototype, x01 matches, camera director). Next: M4 AI opponents.
 
 ---
 

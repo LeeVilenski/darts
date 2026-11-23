@@ -43,11 +43,15 @@ export function useThrowGesture(el: RefObject<HTMLElement | null>) {
     };
 
     const down = (e: PointerEvent) => {
-      const store = useGameStore.getState();
+      let store = useGameStore.getState();
+      if (store.screen !== 'game') return;
       if (store.phase === 'turnOver') {
         store.collectDarts();
         return;
       }
+      // Touching during the impact close-up skips it and starts aiming straight away.
+      if (store.phase === 'impact') store.finishImpact();
+      store = useGameStore.getState();
       if (store.phase !== 'aiming' || pointerId !== null) return;
       pointerId = e.pointerId;
       try {
