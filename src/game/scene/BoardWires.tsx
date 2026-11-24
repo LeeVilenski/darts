@@ -1,17 +1,40 @@
 import { useEffect, useMemo } from 'react';
-import { CylinderGeometry, TorusGeometry, type BufferGeometry } from 'three';
+import { CylinderGeometry, SphereGeometry, TorusGeometry, type BufferGeometry } from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { BOARD, RING_WIRES, SECTORS, SECTOR_ANGLE } from '../../engine/board/geometry';
+import { numberStrokesMm } from './wireNumbers';
 
 /** Round wire, ~1.2 mm thick, half proud of the board face. */
 const WIRE_RADIUS = 0.0006;
 const mm = (v: number) => v / 1000;
+/** Number wire is a little heavier than the spider. */
+const NUMBER_WIRE_RADIUS = 0.001;
+
+/** A bent-wire stroke: a cylinder per segment plus a ball at each joint so bends are rounded. */
+function strokeGeometry(points: [number, number][], radius: number): BufferGeometry[] {
+  const parts: BufferGeometry[] = [];
+  for (let i = 0; i < points.length; i++) {
+    const [x, y] = points[i]!;
+    const joint = new SphereGeometry(radius, 6, 4);
+    joint.translate(mm(x), mm(y), 0);
+    parts.push(joint);
+    if (i === 0) continue;
+    const [px, py] = points[i - 1]!;
+    const len = mm(Math.hypot(x - px, y - py));
+    if (len < 1e-6) continue;
+    const seg = new CylinderGeometry(radius, radius, len, 6, 1, true);
+    seg.rotateZ(-Math.atan2(x - px, y - py));
+    seg.translate(mm((x + px) / 2), mm((y + py) / 2), 0);
+    parts.push(seg);
+  }
+  return parts;
+}
 
 /**
  * The metal spider as real geometry, from the same dimensions the scoring uses:
  * ring wires (bulls, treble, double) and the 20 radial wires. Catches the lamp
  * and the environment, and casts tiny shadows, which is most of what makes a
- * board read as 3D.
+ * board read as 3D. The numbers are bent wire too, as on a real board.
  */
 export function BoardWires() {
   const geometry = useMemo(() => {
@@ -29,6 +52,8 @@ export function BoardWires() {
       g.translate(Math.sin(a) * mid, Math.cos(a) * mid, 0);
       parts.push(g);
     });
+    for (const stroke of numberStrokesMm())
+      parts.push(...strokeGeometry(stroke, NUMBER_WIRE_RADIUS));
     const merged = mergeGeometries(parts)!;
     parts.forEach((p) => p.dispose());
     merged.translate(0, 0, WIRE_RADIUS * 0.4);

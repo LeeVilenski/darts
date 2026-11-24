@@ -1,5 +1,6 @@
 import { CanvasTexture, LinearSRGBColorSpace, SRGBColorSpace } from 'three';
 import { BOARD, RING_WIRES, SECTORS, SECTOR_ANGLE } from '../../engine/board/geometry';
+import { numberStrokesMm } from './wireNumbers';
 
 export type BoardPalette = 'classic' | 'contrast';
 
@@ -9,7 +10,6 @@ const CLASSIC = {
   light: '#e8dbb6',
   red: '#b8202b',
   green: '#137a3c',
-  number: '#e9e9e9',
 };
 /** Colour-blind-safe variant: blue/orange rings, which stay distinct for red-green deficiencies. */
 const CONTRAST = { ...CLASSIC, red: '#1f6fd1', green: '#f08a1c' };
@@ -131,24 +131,21 @@ export function createBoardTexture(palette: BoardPalette = 'classic', size = 204
     ctx.stroke();
   });
 
-  // Numbers: brushed-metal look with a drop shadow, like the wire number ring.
-  ctx.font = `800 ${Math.round(29 * s)}px system-ui, -apple-system, "Segoe UI", sans-serif`;
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'middle';
-  const numberRadius = (BOARD.doubleOuter + BOARD.boardRadius) / 2;
-  SECTORS.forEach((n, i) => {
-    const a = rad(i * SECTOR_ANGLE);
-    const x = c + Math.sin(a) * numberRadius * s;
-    const y = c - Math.cos(a) * numberRadius * s;
-    ctx.fillStyle = 'rgba(0,0,0,0.7)';
-    ctx.fillText(String(n), x + 1.2 * s, y + 1.6 * s);
-    const g = ctx.createLinearGradient(x, y - 14 * s, x, y + 14 * s);
-    g.addColorStop(0, '#ffffff');
-    g.addColorStop(0.5, COLORS.number);
-    g.addColorStop(1, '#9a9a9a');
-    ctx.fillStyle = g;
-    ctx.fillText(String(n), x, y);
-  });
+  // The numbers are 3D wire (BoardWires); paint only their soft contact shadow.
+  ctx.strokeStyle = 'rgba(0,0,0,0.6)';
+  ctx.lineWidth = 3 * s;
+  ctx.lineCap = 'round';
+  ctx.lineJoin = 'round';
+  for (const stroke of numberStrokesMm()) {
+    ctx.beginPath();
+    stroke.forEach(([x, y], k) => {
+      const px = c + (x + 0.5) * s;
+      const py = c - (y - 0.7) * s; // canvas y is down; offset as if lit from above
+      if (k) ctx.lineTo(px, py);
+      else ctx.moveTo(px, py);
+    });
+    ctx.stroke();
+  }
 
   const tex = new CanvasTexture(canvas);
   tex.colorSpace = SRGBColorSpace;
