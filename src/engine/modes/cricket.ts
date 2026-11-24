@@ -1,14 +1,16 @@
 import type { DartScore } from './dart';
-import { baseOf, nextTurn, type TurnStatus } from './types';
+import { awardLeg, baseOf, nextTurn, type MatchFormat, type TurnStatus } from './types';
 
 /** Numbers in play, in the order they are usually shown and chased. 25 = bull. */
 export const CRICKET_TARGETS = [20, 19, 18, 17, 16, 15, 25] as const;
 export type CricketTarget = (typeof CRICKET_TARGETS)[number];
 
-export interface CricketOptions {
+export interface CricketOptions extends MatchFormat {
   legsToWin: number;
+  /** Cut-throat: extra marks give points to opponents still open; lowest score wins. */
+  cutThroat?: boolean;
 }
-export const DEFAULT_CRICKET: CricketOptions = { legsToWin: 1 };
+export const DEFAULT_CRICKET: CricketOptions = { legsToWin: 1, cutThroat: false };
 
 export interface CricketPlayer {
   name: string;
@@ -16,6 +18,7 @@ export interface CricketPlayer {
   marks: Record<CricketTarget, number>;
   points: number;
   legsWon: number;
+  setsWon: number;
   stats: { darts: number; marks: number };
 }
 
@@ -25,6 +28,9 @@ export interface CricketState {
   players: CricketPlayer[];
   current: number;
   legStarter: number;
+  setStarter?: number;
+  set?: number;
+  legWinner?: number | null;
   leg: number;
   turn: { player: number; darts: DartScore[]; marks: number; points: number };
   status: TurnStatus;
@@ -59,6 +65,7 @@ export function createCricket(
       marks: emptyMarks(),
       points: 0,
       legsWon: 0,
+      setsWon: 0,
       stats: { darts: 0, marks: 0 },
     })),
     current: 0,
@@ -85,6 +92,7 @@ export function applyCricketDart(s: CricketState, dart: DartScore): CricketState
   let points = me.points;
   let hits = 0;
   let scored = 0;
+  const cutThroat = !!s.options.cutThroat;
 
   if (isTarget(base)) {
     hits = dart.multiplier;
@@ -94,7 +102,7 @@ export function applyCricketDart(s: CricketState, dart: DartScore): CricketState
     const othersOpen = s.players.some((o, j) => j !== i && o.marks[base] < 3);
     scored = othersOpen ? extra * base : 0;
     marks = { ...me.marks, [base]: Math.min(3, before + hits) };
-    points = me.points + scored;
+    if (!cutThroat) points = me.points + scored;
   }
 
   const player: CricketPlayer = {
@@ -103,17 +111,25 @@ export function applyCricketDart(s: CricketState, dart: DartScore): CricketState
     points,
     stats: { darts: me.stats.darts + 1, marks: me.stats.marks + hits },
   };
-  const players = s.players.map((p, j) => (j === i ? player : p));
+  // Cut-throat: the points land on every opponent who still has the number open.
+  const players = s.players.map((p, j) =>
+    j === i
+      ? player
+      : cutThroat && scored && p.marks[base as CricketTarget] < 3
+        ? { ...p, points: p.points + scored }
+        : p,
+  );
   const darts = [...s.turn.darts, dart];
   const turn = { ...s.turn, darts, marks: s.turn.marks + hits, points: s.turn.points + scored };
 
-  const won = allClosed(player) && players.every((o, j) => j === i || player.points >= o.points);
+  const ahead = (o: CricketPlayer) =>
+    cutThroat ? player.points <= o.points : player.points >= o.points;
+  const won = allClosed(player) && players.every((o, j) => j === i || ahead(o));
   if (won) {
-    const legsWon = player.legsWon + 1;
-    const matchWon = legsWon >= s.options.legsToWin;
+    const { player: winner, matchWon } = awardLeg(player, s.options);
     return {
       ...s,
-      players: players.map((p, j) => (j === i ? { ...p, legsWon } : p)),
+      players: players.map((p, j) => (j === i ? winner : p)),
       turn,
       status: matchWon ? 'matchWon' : 'legWon',
       winner: matchWon ? i : null,

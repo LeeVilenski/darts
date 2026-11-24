@@ -4,14 +4,16 @@ import type { HitResult } from '../board/resolveHit';
 export interface DartScore {
   points: number;
   multiplier: 0 | 1 | 2 | 3;
-  /** "T20", "D16", "S5", "25", "BULL", "MISS", "BOUNCE" */
+  /** "T20", "D16", "S5", "25", "BULL", "MISS", "BOUNCE", "ROBIN" */
   label: string;
 }
+
+const NO_SCORE_LABEL = { bounce: 'BOUNCE', robinHood: 'ROBIN', miss: 'MISS' } as const;
 
 export function toDartScore(hit: HitResult): DartScore {
   if (hit.kind === 'score')
     return { points: hit.points, multiplier: hit.multiplier, label: hit.label };
-  return { points: 0, multiplier: 0, label: hit.kind === 'bounce' ? 'BOUNCE' : 'MISS' };
+  return { points: 0, multiplier: 0, label: NO_SCORE_LABEL[hit.kind] };
 }
 
 export const isDouble = (d: DartScore) => d.multiplier === 2; // includes the inner bull

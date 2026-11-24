@@ -1,15 +1,32 @@
 import { create } from 'zustand';
-import { planAiThrow } from '../engine/ai/simulate';
+import { personalityFor, type AiPersonality } from '../engine/ai/personality';
+import { aiIntent, planAiThrow } from '../engine/ai/simulate';
+import type { Collision, StuckDart } from '../engine/board/collision';
 import type { AiLevel } from '../engine/ai/skill';
 import type { BounceSetting, HitResult } from '../engine/board/resolveHit';
-import { resolveHit } from '../engine/board/resolveHit';
-import { DEFAULT_ATC, type AtcOptions } from '../engine/modes/aroundTheClock';
-import { DEFAULT_CRICKET, type CricketOptions } from '../engine/modes/cricket';
 import { toDartScore } from '../engine/modes/dart';
-import { applyMatchDart, createMatch, endMatchTurn, type MatchState } from '../engine/modes/match';
-import { DEFAULT_X01, type X01Options } from '../engine/modes/x01';
+import {
+  applyMatchDart,
+  createMatch,
+  endMatchTurn,
+  MODE_DEFAULTS,
+  type MatchConfig,
+  type MatchState,
+  type ModeId,
+  type ModeOptions,
+} from '../engine/modes/match';
+import { DEFAULT_X01 } from '../engine/modes/x01';
+import {
+  applyBullUpDart,
+  bullUpThrower,
+  createBullUp,
+  rethrowBullUp,
+  type BullUpState,
+} from '../engine/modes/bullUp';
+import { withStarter } from '../engine/modes/types';
 import { recordMatch } from './lifetimeStats';
-import { simulateFlight, worldToBoardMm, type Flight } from '../engine/physics/ballistics';
+import { worldToBoardMm, type Flight } from '../engine/physics/ballistics';
+import { resolveDart, stuckDartOf } from '../engine/physics/resolveDart';
 import {
   computeLaunch,
   type AssistLevel,
@@ -25,6 +42,8 @@ export interface ThrownDart {
   launch: LaunchParams;
   flight: Flight;
   result: HitResult;
+  /** Contact with a dart already in the board (deflection or Robin Hood), if any. */
+  collision: Collision | null;
   /** True once the flight animation reached the board/floor. */
   landed: boolean;
 }
@@ -41,7 +60,7 @@ export type Quality = 'auto' | 'high' | 'low';
 /** A slow-motion replay of one dart, then continue to `then`. */
 export interface Replay {
   dartId: number;
-  reason: '180' | 'checkout' | 'bounce';
+  reason: '180' | 'checkout' | 'bounce' | 'robinHood';
   then: Exclude<Phase, 'replay'>;
 }
 export type Screen = 'menu' | 'game';
@@ -53,11 +72,21 @@ export interface PlayerSetup {
   ai?: AiLevel;
 }
 
-export type GameSetup =
-  | { kind: 'practice' }
-  | { kind: 'x01'; options: X01Options; players: PlayerSetup[] }
-  | { kind: 'cricket'; options: CricketOptions; players: PlayerSetup[] }
-  | { kind: 'atc'; options: AtcOptions; players: PlayerSetup[] };
+/** Options every match setup shares. */
+interface MatchExtras {
+  players: PlayerSetup[];
+  /** Decide who throws first with a bull-up (2+ players). */
+  bullUp?: boolean;
+  /** A career match: player 0 is you; the result goes to the career. */
+  career?: boolean;
+}
+
+/** A match of mode M: its options plus the players. */
+export type ModeSetup<M extends ModeId = ModeId> = {
+  [K in M]: { kind: K; options: ModeOptions<K> } & MatchExtras;
+}[M];
+
+export type GameSetup = { kind: 'practice' } | ModeSetup;
 export type MatchSetup = Exclude<GameSetup, { kind: 'practice' }>;
 
 /** A dart's landing spot in Practice, for the heatmap (board mm). */
@@ -94,6 +123,8 @@ interface GameState extends Settings {
   /** Speed up the current AI turn (skip button). */
   aiFast: boolean;
   replay: Replay | null;
+  /** Pre-match bull-up in progress (match.current tracks whoever is throwing). */
+  bullUp: BullUpState | null;
   startGame(setup: GameSetup): void;
   quitToMenu(): void;
   setAim(aim: { x: number; y: number }): void;
@@ -180,29 +211,15 @@ export function loadSetup(): GameSetup {
   const players = (saved.players as (PlayerSetup | string)[])
     .slice(0, 4)
     .map((p) => (typeof p === 'string' ? { name: p } : p));
-  switch (saved.kind) {
-    case 'x01':
-      return { kind: 'x01', options: { ...DEFAULT_X01, ...saved.options }, players };
-    case 'cricket':
-      return { kind: 'cricket', options: { ...DEFAULT_CRICKET, ...saved.options }, players };
-    case 'atc':
-      return { kind: 'atc', options: { ...DEFAULT_ATC, ...saved.options }, players };
-    default:
-      return DEFAULT_SETUP;
-  }
+  if (!(saved.kind in MODE_DEFAULTS)) return DEFAULT_SETUP;
+  const options = { ...MODE_DEFAULTS[saved.kind], ...saved.options };
+  return { ...saved, options, players } as GameSetup;
 }
 
 function matchFor(setup: GameSetup): MatchState | null {
   if (setup.kind === 'practice') return null;
   const names = setup.players.map((p) => p.name);
-  switch (setup.kind) {
-    case 'x01':
-      return createMatch(names, { mode: 'x01', options: setup.options });
-    case 'cricket':
-      return createMatch(names, { mode: 'cricket', options: setup.options });
-    case 'atc':
-      return createMatch(names, { mode: 'atc', options: setup.options });
-  }
+  return createMatch(names, { mode: setup.kind, options: setup.options } as MatchConfig);
 }
 
 const emptyPractice = () => ({ darts: 0, points: 0, hits: [] as PracticeHit[] });
@@ -231,12 +248,20 @@ export const useGameStore = create<GameState>((set, get) => ({
   practice: emptyPractice(),
   aiFast: false,
   replay: null,
+  bullUp: null,
 
   startGame(setup) {
-    writeJson(SETUP_KEY, setup);
+    // Career matches are set up by the career, not remembered as the menu's choice.
+    if (setup.kind === 'practice' || !setup.career) writeJson(SETUP_KEY, setup);
+    const bullUp =
+      setup.kind !== 'practice' && setup.bullUp && setup.players.length > 1
+        ? createBullUp(setup.players.length)
+        : null;
     set({
       screen: 'game',
       setup,
+      bullUp,
+      replay: null,
       match: matchFor(setup),
       aiFast: false,
       phase: 'aiming',
@@ -247,7 +272,7 @@ export const useGameStore = create<GameState>((set, get) => ({
   },
 
   quitToMenu() {
-    set({ screen: 'menu', match: null, darts: [], phase: 'aiming', replay: null });
+    set({ screen: 'menu', match: null, darts: [], phase: 'aiming', replay: null, bullUp: null });
   },
 
   setAim(aim) {
@@ -258,7 +283,8 @@ export const useGameStore = create<GameState>((set, get) => ({
 
   throwDart(aim, flick) {
     const s = get();
-    if (s.phase !== 'aiming' || s.darts.length >= DARTS_PER_TURN || currentAi(s)) return;
+    const full = s.bullUp ? bullUpThrower(s.bullUp) === null : s.darts.length >= DARTS_PER_TURN;
+    if (s.phase !== 'aiming' || full || currentAi(s)) return;
     launchDart(aim, computeLaunch(aim, flick, s.assist, rng));
   },
 
@@ -266,7 +292,11 @@ export const useGameStore = create<GameState>((set, get) => ({
     const s = get();
     const level = currentAi(s);
     if (!level || !s.match || s.phase !== 'aiming' || s.match.status !== 'open') return;
-    const { target, launch } = planAiThrow(s.match, level, rng);
+    const { target, launch } = planAiThrow(s.match, level, rng, {
+      personality: currentAiPersonality(s) ?? undefined,
+      stuck: stuckDarts(s.darts),
+      target: s.bullUp ? { label: 'BULL', point: { x: 0, y: 0 } } : undefined,
+    });
     launchDart(target.point, launch);
   },
 
@@ -280,6 +310,18 @@ export const useGameStore = create<GameState>((set, get) => ({
     if (!dart || dart.landed) return;
     const darts = s.darts.map((d) => (d.id === id ? { ...d, landed: true } : d));
     vibrate(dart.result.kind === 'bounce' ? 30 : 12);
+
+    if (s.match && s.bullUp) {
+      const bullUp = applyBullUpDart(s.bullUp, bullUpDistance(dart));
+      const next = bullUpThrower(bullUp);
+      set({
+        darts,
+        bullUp,
+        match: next === null ? s.match : { ...s.match, current: next },
+        phase: next === null ? 'turnOver' : 'impact',
+      });
+      return;
+    }
 
     if (s.match) {
       const match = applyMatchDart(s.match, toDartScore(dart.result));
@@ -318,6 +360,25 @@ export const useGameStore = create<GameState>((set, get) => ({
   collectDarts() {
     const s = get();
     if (s.phase !== 'turnOver' || s.match?.status === 'matchWon') return;
+    if (s.bullUp && s.match) {
+      if (s.bullUp.winner !== null) {
+        set({
+          bullUp: null,
+          match: withStarter(s.match, s.bullUp.winner),
+          darts: [],
+          phase: 'aiming',
+        });
+      } else {
+        const bullUp = rethrowBullUp(s.bullUp);
+        set({
+          bullUp,
+          match: { ...s.match, current: bullUp.throwers[0]! },
+          darts: [],
+          phase: 'aiming',
+        });
+      }
+      return;
+    }
     set({
       darts: [],
       phase: 'aiming',
@@ -338,29 +399,37 @@ export const useGameStore = create<GameState>((set, get) => ({
   },
 }));
 
-/** Big moments get a slow-motion replay: a 180, a checkout, or a bounce-out. */
+/** Big moments get a slow-motion replay: a 180, a checkout, a bounce-out or a Robin Hood. */
 function replayReason(match: MatchState, dart: ThrownDart): Replay['reason'] | null {
+  if (dart.result.kind === 'robinHood') return 'robinHood';
   if (dart.result.kind === 'bounce') return 'bounce';
   if (match.status === 'legWon' || match.status === 'matchWon') return 'checkout';
   if (match.mode === 'x01' && match.turn.points === 180) return '180';
   return null;
 }
 
-/** Fly a launched dart: precompute its flight and result, then animate it. */
+/** How far (mm) a bull-up dart finished from the bull centre; off the board counts as infinitely far. */
+function bullUpDistance(d: ThrownDart): number {
+  if (d.result.kind === 'bounce' || !d.flight.impact) return Infinity;
+  return d.result.r;
+}
+
+/** Darts of this turn still in the board, as obstacles for the next one. */
+export function stuckDarts(darts: ThrownDart[]): StuckDart[] {
+  return darts.map(stuckDartOf).filter((d): d is StuckDart => d !== null);
+}
+
+/**
+ * Fly a launched dart: precompute its flight and result (including any
+ * collision with darts already in the board), then animate it.
+ */
 function launchDart(aim: { x: number; y: number }, launch: LaunchParams) {
   const s = useGameStore.getState();
-  const flight = simulateFlight(launch.p0, launch.v0);
-  let result: HitResult;
-  if (flight.impact) {
-    const mm = worldToBoardMm(flight.impact);
-    result = resolveHit(mm.x, mm.y, rng, s.bounce);
-  } else {
-    result = { kind: 'miss', r: Infinity, angle: 0 };
-  }
+  const { flight, result, collision } = resolveDart(launch, stuckDarts(s.darts), rng, s.bounce);
   useGameStore.setState({
     phase: 'flight',
     aim,
-    darts: [...s.darts, { id: nextId++, launch, flight, result, landed: false }],
+    darts: [...s.darts, { id: nextId++, launch, flight, result, collision, landed: false }],
   });
 }
 
@@ -368,6 +437,20 @@ function launchDart(aim: { x: number; y: number }, launch: LaunchParams) {
 export function currentAi(s: Pick<GameState, 'setup' | 'match'>): AiLevel | null {
   if (s.setup.kind === 'practice' || !s.match) return null;
   return s.setup.players[s.match.current]?.ai ?? null;
+}
+
+/** The current AI player's character (derived from its name), or null for a human. */
+export function currentAiPersonality(s: Pick<GameState, 'setup' | 'match'>): AiPersonality | null {
+  if (!currentAi(s) || s.setup.kind === 'practice' || !s.match) return null;
+  return personalityFor(s.setup.players[s.match.current]!.name);
+}
+
+/** What the current AI will aim at next and how much rides on it, or null for a human. */
+export function currentAiIntent(s: Pick<GameState, 'setup' | 'match' | 'darts'>) {
+  const level = currentAi(s);
+  const personality = currentAiPersonality(s);
+  if (!level || !personality || !s.match || s.match.status !== 'open') return null;
+  return aiIntent(s.match, level, { personality, stuck: stuckDarts(s.darts) });
 }
 
 /** Reset the RNG (tests / future replays). */
