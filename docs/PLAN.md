@@ -1,6 +1,6 @@
 # 3D Darts — Implementation Plan
 
-Status: **M0–M8 complete.** Remaining optional work: online multiplayer, leaderboards, cosmetics, a recorded/TTS caller pack (docs/VOICE.md), and enabling Supabase (docs/ACCOUNTS.md) and Vercel Web Analytics.
+Status: **M0–M8 complete, plus M9 (sets & bull-up, six more modes, career).** Remaining optional work: online multiplayer, leaderboards, cosmetics, a recorded/TTS caller pack (docs/VOICE.md), and enabling Supabase (docs/ACCOUNTS.md) and Vercel Web Analytics.
 
 ---
 
@@ -275,3 +275,19 @@ Vercel's Git integration handles deploys itself; CI only gates merges (no Vercel
 | 13  | Repo             | Single pnpm package + Vercel functions in `/api`.                                                              |
 
 Next step: **M0 → M1**.
+
+## M9: match format, more modes, career
+
+- **Sets & bull-up.** `MatchFormat` (`legsToWin`, optional `setsToWin`) is shared by every mode;
+  `awardLeg` credits legs/sets and `nextTurn` alternates the throw per leg and per set. The bull-up
+  (`engine/modes/bullUp.ts`) runs in the store before the match: one dart each, closest to the bull
+  throws first (`withStarter`), ties rethrow, darts stay in the board between throwers.
+- **Modes.** Shanghai, Killer, Bob's 27, Halve-It and the 121 ladder are reducers like the others
+  (`engine/modes/*.ts`), dispatched in `match.ts`; round-based ones share `rounds.ts` (seat order,
+  skipping eliminated/finished players, tie-breaks). Cut-throat is a Cricket option. Each has an AI
+  target in `strategy.ts`, and `modes.test.ts` plays every mode to a finish with AI players.
+- **Career** (`engine/career/`). Pure and seeded: a fictional 48-player roster over four tiers,
+  8-player knockouts per event, order-of-merit points, promotion for the top 2, trophies and
+  earnings. AI-only matches are simulated headlessly with `simulateMatch` (same throw model,
+  collisions and nerves). `store/useCareer.ts` persists it and records your result when a career
+  match ends.

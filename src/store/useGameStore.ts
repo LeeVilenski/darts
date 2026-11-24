@@ -77,6 +77,8 @@ interface MatchExtras {
   players: PlayerSetup[];
   /** Decide who throws first with a bull-up (2+ players). */
   bullUp?: boolean;
+  /** A career match: player 0 is you; the result goes to the career. */
+  career?: boolean;
 }
 
 /** A match of mode M: its options plus the players. */
@@ -249,7 +251,8 @@ export const useGameStore = create<GameState>((set, get) => ({
   bullUp: null,
 
   startGame(setup) {
-    writeJson(SETUP_KEY, setup);
+    // Career matches are set up by the career, not remembered as the menu's choice.
+    if (setup.kind === 'practice' || !setup.career) writeJson(SETUP_KEY, setup);
     const bullUp =
       setup.kind !== 'practice' && setup.bullUp && setup.players.length > 1
         ? createBullUp(setup.players.length)

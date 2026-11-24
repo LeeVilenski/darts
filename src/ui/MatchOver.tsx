@@ -2,6 +2,9 @@ import { marksPerRound } from '../engine/modes/cricket';
 import type { MatchState } from '../engine/modes/match';
 import { playsSets } from '../engine/modes/types';
 import { threeDartAverage } from '../engine/modes/x01';
+import { nextMatch } from '../engine/career/career';
+import { ROUND_NAMES } from '../engine/career/tiers';
+import { useCareer } from '../store/useCareer';
 import { useGameStore } from '../store/useGameStore';
 
 type Row = [string, (i: number) => string | number];
@@ -112,6 +115,18 @@ export function MatchOver({ match }: { match: MatchState }) {
   const startGame = useGameStore((s) => s.startGame);
   const quit = useGameStore((s) => s.quitToMenu);
   const solo = match.players.length === 1;
+  const career = setup.kind !== 'practice' && !!setup.career;
+  const openCareer = useCareer((s) => s.setOpen);
+  const careerNote = useCareer((s) => {
+    if (!career || !s.career) return null;
+    const next = nextMatch(s.career);
+    if (next)
+      return `Next: ${ROUND_NAMES[next.round]!.toLowerCase()} against ${next.opponent.name}`;
+    const last = s.career.results.at(-1);
+    return last
+      ? `${last.name} over: ${last.reached === 'W' ? 'champion!' : `out in the ${last.reached === 'F' ? 'final' : last.reached === 'SF' ? 'semi-finals' : 'quarter-finals'}`} (+${last.points} pts)`
+      : null;
+  });
   const rows = statRows(match);
   if (playsSets(match.options)) rows.unshift(['Sets', (i) => match.players[i]!.setsWon]);
   else if (match.options.legsToWin > 1) rows.unshift(['Legs', (i) => match.players[i]!.legsWon]);
@@ -142,12 +157,30 @@ export function MatchOver({ match }: { match: MatchState }) {
             ))}
           </tbody>
         </table>
-        <button type="button" className="primary-btn" onClick={() => startGame(setup)}>
-          Rematch
-        </button>
-        <button type="button" className="ghost-btn" onClick={quit}>
-          Main menu
-        </button>
+        {career ? (
+          <>
+            {careerNote && <p className="career-last">{careerNote}</p>}
+            <button
+              type="button"
+              className="primary-btn"
+              onClick={() => {
+                quit();
+                openCareer(true);
+              }}
+            >
+              Back to career
+            </button>
+          </>
+        ) : (
+          <>
+            <button type="button" className="primary-btn" onClick={() => startGame(setup)}>
+              Rematch
+            </button>
+            <button type="button" className="ghost-btn" onClick={quit}>
+              Main menu
+            </button>
+          </>
+        )}
       </div>
     </div>
   );

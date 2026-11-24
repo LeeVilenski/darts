@@ -692,3 +692,96 @@ input {
   font-size: 13px;
   pointer-events: auto;
 }
+
+/* ---------- career ---------- */
+.career-btn {
+  margin-bottom: 4px;
+}
+.sheet.career > * {
+  flex-shrink: 0;
+}
+.sheet.career h3 {
+  margin: 14px 0 6px;
+  font-size: 15px;
+}
+.career-banner {
+  background: rgba(255, 106, 0, 0.14);
+  border: 1px solid var(--accent);
+  border-radius: 12px;
+  padding: 10px 12px;
+  font-size: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.ghost-btn.small {
+  min-height: 32px;
+  padding: 4px 10px;
+  align-self: flex-start;
+}
+.ghost-btn.danger {
+  color: #ff8a80;
+}
+.career-last {
+  font-size: 13px;
+  color: var(--muted);
+}
+.next-match {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.06);
+  font-size: 13px;
+}
+.next-match .versus {
+  font-size: 17px;
+  font-weight: 800;
+}
+.bracket {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  padding: 8px 0;
+}
+.bracket-round {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-around;
+  gap: 6px;
+  min-width: 130px;
+}
+.bracket-match {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  font-size: 12px;
+}
+.bracket-match > div {
+  display: flex;
+  justify-content: space-between;
+  gap: 6px;
+  padding: 3px 6px;
+  color: var(--muted);
+}
+.bracket-match > div.won {
+  color: inherit;
+  font-weight: 700;
+}
+.bracket-match > div.you span {
+  color: var(--accent);
+}
+.merit tr.you th,
+.merit tr.you td {
+  color: var(--accent);
+  font-weight: 700;
+}
+.trophies {
+  margin: 0;
+  padding-left: 0;
+  list-style: none;
+  font-size: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}

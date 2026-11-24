@@ -6,8 +6,15 @@ See [`docs/PLAN.md`](docs/PLAN.md) for the full implementation plan and mileston
 
 ## How to play
 
-- Pick a game: **x01 (501 / 301 / 701)**, **Cricket**, **Around the Clock** or **Practice** (with a heatmap).
-  Up to 4 players share one device; any seat can be an AI opponent (Pub / Club / County / Pro).
+- **Career mode:** start in the Pub League and work up through the County Circuit and Challenge Tour to
+  the Pro Tour. Each season is 4 knockout events against a fictional tour; the other matches are
+  simulated through the same physics. Top 2 on the order of merit go up a tier. Earnings and a trophy
+  cabinet are saved on the device.
+- Pick a game: **x01 (501 / 301 / 701)** in legs or **sets**, **Cricket** (standard or **cut-throat**),
+  **Around the Clock**, **Shanghai**, **Killer**, **Halve-It**, **Bob's 27**, the **121 checkout ladder**,
+  or **Practice** (with a heatmap). Up to 4 players share one device; any seat can be an AI opponent
+  (Pub / Club / County / Pro). Multi-player matches can start with a **bull-up** to decide who throws
+  first, and the throw alternates every leg (and every set).
 - **Drag** to move the aim marker, then **flick up and release** to throw. Flick speed is the weight
   (too hard lands high, too soft low); tilting the flick pushes the dart sideways.
 - Prefer a power bar? Settings → Throwing → **Power meter**: hold the Throw button and release in the green.

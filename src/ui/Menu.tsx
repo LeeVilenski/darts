@@ -9,7 +9,9 @@ import {
   type PlayerSetup,
 } from '../store/useGameStore';
 import { MODE_NAMES } from './modeView';
+import { useCareer } from '../store/useCareer';
 import { AccountPanel } from './AccountPanel';
+import { CareerSheet } from './CareerSheet';
 import { Segmented } from './Segmented';
 import { SettingsPanel } from './SettingsPanel';
 import { StatsSheet } from './StatsSheet';
@@ -68,6 +70,9 @@ export function Menu() {
   );
   const [showSettings, setShowSettings] = useState(false);
   const [showStats, setShowStats] = useState(false);
+  const careerOpen = useCareer((s) => s.open);
+  const setCareerOpen = useCareer((s) => s.setOpen);
+  const hasCareer = useCareer((s) => s.career !== null);
 
   const patch = <M extends ModeId>(mode: M, p: Partial<ModeOptions<M>>) =>
     setAll((a) => ({ ...a, [mode]: { ...a[mode], ...p } }));
@@ -101,6 +106,14 @@ export function Menu() {
     <div className="menu" data-testid="menu">
       <div className="menu-card">
         <h1>Darts</h1>
+        <button
+          type="button"
+          className="primary-btn career-btn"
+          data-testid="open-career"
+          onClick={() => setCareerOpen(true)}
+        >
+          {hasCareer ? 'Continue career' : 'Career mode'}
+        </button>
 
         <div className="field">
           <span className="field-label">Game</span>
@@ -376,6 +389,7 @@ export function Menu() {
       </div>
       {/* Outside the card: its backdrop-filter would otherwise contain the overlay. */}
       {showStats && <StatsSheet onClose={() => setShowStats(false)} />}
+      {careerOpen && <CareerSheet />}
     </div>
   );
 }
