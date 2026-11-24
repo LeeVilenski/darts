@@ -31,6 +31,9 @@ export function pressureOn(match: MatchState, target: AiTarget): number {
         return cricketPressure(match, target);
       case 'atc':
         return atcPressure(match);
+      default:
+        // Round-based and practice games: only the deciding-leg nerves apply.
+        return 0;
     }
   })();
   const { legsToWin } = match.options;

@@ -77,7 +77,8 @@ export function useGameAudio() {
       );
       if (landed) impactSound(landed);
 
-      if (s.phase === 'turnOver' && prev.phase !== 'turnOver') {
+      // The bull-up isn't scored, so the caller stays quiet until the match starts.
+      if (s.phase === 'turnOver' && prev.phase !== 'turnOver' && !s.bullUp) {
         if (s.match) {
           const { keys, cheer } = callForTurnEnd(s.match);
           if (cheer) playCheer(cheer);
@@ -98,7 +99,7 @@ export function useGameAudio() {
         s.match.turn.darts.length === 0 &&
         s.phase === 'aiming' &&
         (prev.phase === 'turnOver' || prev.screen !== 'game' || prev.match === null);
-      if (turnStarted && s.match && !currentAi(s)) call(callForTurnStart(s.match));
+      if (turnStarted && s.match && !s.bullUp && !currentAi(s)) call(callForTurnStart(s.match));
     });
   }, []);
 }

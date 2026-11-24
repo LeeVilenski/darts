@@ -1,5 +1,6 @@
 import { marksPerRound } from '../engine/modes/cricket';
 import type { MatchState } from '../engine/modes/match';
+import { playsSets } from '../engine/modes/types';
 import { threeDartAverage } from '../engine/modes/x01';
 import { useGameStore } from '../store/useGameStore';
 
@@ -34,12 +35,54 @@ function statRows(m: MatchState): Row[] {
           },
         ],
       ];
+    case 'shanghai':
+      return [
+        ['Score', (i) => m.players[i]!.score],
+        ['Hits', (i) => m.players[i]!.stats.hits],
+        ['Shanghais', (i) => m.players[i]!.stats.shanghais],
+      ];
+    case 'bobs27':
+      return [
+        [
+          'Score',
+          (i) => (m.players[i]!.out ? `Out (${m.players[i]!.score})` : m.players[i]!.score),
+        ],
+        ['Doubles hit', (i) => m.players[i]!.stats.hits],
+        [
+          'Hit rate',
+          (i) => {
+            const s = m.players[i]!.stats;
+            return `${s.darts ? Math.round((s.hits / s.darts) * 100) : 0}%`;
+          },
+        ],
+      ];
+    case 'halveit':
+      return [
+        ['Score', (i) => m.players[i]!.score],
+        ['Hits', (i) => m.players[i]!.stats.hits],
+        ['Halved', (i) => m.players[i]!.stats.halved],
+      ];
+    case 'killer':
+      return [
+        ['Number', (i) => m.players[i]!.number],
+        ['Lives left', (i) => m.players[i]!.lives],
+        ['Knock-outs', (i) => m.players[i]!.stats.kills],
+      ];
+    case 'ladder':
+      return [
+        ['Highest checkout', (i) => m.players[i]!.best || '–'],
+        ['Checkouts', (i) => `${m.players[i]!.checkouts}/${m.options.attempts}`],
+        ['Darts', (i) => m.players[i]!.stats.darts],
+      ];
   }
 }
 
 function headline(m: MatchState): string {
   const winner = m.players[m.winner ?? 0]!;
-  if (m.players.length > 1) return `${winner.name} wins!`;
+  if (m.players.length > 1)
+    return m.mode === 'shanghai' && m.turn.shanghai
+      ? `Shanghai! ${winner.name} wins`
+      : `${winner.name} wins!`;
   switch (m.mode) {
     case 'x01':
       return `Checked out in ${winner.stats.darts} darts!`;
@@ -47,6 +90,20 @@ function headline(m: MatchState): string {
       return `Board closed in ${winner.stats.darts} darts!`;
     case 'atc':
       return `Round the clock in ${winner.stats.darts} darts!`;
+    case 'shanghai':
+      return m.turn.shanghai ? 'Shanghai!' : `${m.players[0]!.score} points`;
+    case 'bobs27': {
+      const p = m.players[0]!;
+      return p.out ? `Out on round ${m.round}` : `Bob's 27 finished on ${p.score}!`;
+    }
+    case 'halveit':
+      return `${m.players[0]!.score} points`;
+    case 'killer':
+      return `${winner.name} wins!`;
+    case 'ladder': {
+      const p = m.players[0]!;
+      return p.best ? `Highest checkout ${p.best}` : 'No checkouts this time';
+    }
   }
 }
 
@@ -56,7 +113,8 @@ export function MatchOver({ match }: { match: MatchState }) {
   const quit = useGameStore((s) => s.quitToMenu);
   const solo = match.players.length === 1;
   const rows = statRows(match);
-  if (match.options.legsToWin > 1) rows.unshift(['Legs', (i) => match.players[i]!.legsWon]);
+  if (playsSets(match.options)) rows.unshift(['Sets', (i) => match.players[i]!.setsWon]);
+  else if (match.options.legsToWin > 1) rows.unshift(['Legs', (i) => match.players[i]!.legsWon]);
 
   return (
     <div className="sheet-backdrop" onPointerDown={(e) => e.stopPropagation()}>

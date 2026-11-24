@@ -15,6 +15,8 @@ export interface AiContext {
   personality?: AiPersonality;
   /** Darts already in the board this turn. */
   stuck?: readonly StuckDart[];
+  /** Throw at this instead of choosing a target (e.g. the bull-up). */
+  target?: AiTarget;
 }
 
 export interface AiIntent {
@@ -29,6 +31,7 @@ export interface AiThrow extends AiIntent {
 
 /** What the AI will aim at and how much is riding on it (no randomness). */
 export function aiIntent(state: MatchState, level: AiLevel, ctx: AiContext = {}): AiIntent {
+  if (ctx.target) return { target: ctx.target, pressure: 0 };
   const personality = ctx.personality ?? NEUTRAL_PERSONALITY;
   let target = chooseTargetFor(state, personality.favouriteDouble);
   if (AI_SKILL[level].readsBlockers && ctx.stuck?.length)

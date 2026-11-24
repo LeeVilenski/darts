@@ -3,6 +3,7 @@ import type { HitResult } from '../engine/board/resolveHit';
 import { AI_SKILL } from '../engine/ai/skill';
 import { CRICKET_TARGETS, type CricketState } from '../engine/modes/cricket';
 import { toDartScore } from '../engine/modes/dart';
+import { playsSets, setJustWon } from '../engine/modes/types';
 import type { MatchState } from '../engine/modes/match';
 import { ASSIST } from '../engine/physics/throwModel';
 import {
@@ -49,6 +50,7 @@ const points = (d: ThrownDart) => (d.result.kind === 'score' ? d.result.points :
 export function Hud() {
   const match = useGameStore((s) => s.match);
   const phase = useGameStore((s) => s.phase);
+  const bullUp = useGameStore((s) => s.bullUp !== null);
   const [menuOpen, setMenuOpen] = useState(false);
   return (
     <div className="hud">
@@ -64,7 +66,7 @@ export function Hud() {
         </button>
         {match ? <Scoreboard match={match} /> : <PracticeCard />}
         {match?.mode === 'cricket' && <CricketGrid match={match} />}
-        <TurnStrip />
+        {bullUp ? <BullUpStrip /> : <TurnStrip />}
       </header>
       <ScorePop />
       <ReplayBadge />
@@ -83,6 +85,7 @@ export function Hud() {
 function Scoreboard({ match }: { match: MatchState }) {
   const setup = useGameStore((s) => s.setup);
   const multiLeg = match.options.legsToWin > 1;
+  const sets = playsSets(match.options);
   return (
     <div className="scoreboard" data-testid="scoreboard">
       {match.players.map((p, i) => (
@@ -95,7 +98,13 @@ function Scoreboard({ match }: { match: MatchState }) {
             {primaryValue(match, i)}
           </div>
           <div className="meta">
-            {multiLeg && <span>Legs {p.legsWon}</span>}
+            {sets ? (
+              <span aria-label={`${p.setsWon} sets, ${p.legsWon} legs`}>
+                S{p.setsWon} L{p.legsWon}
+              </span>
+            ) : (
+              multiLeg && <span>Legs {p.legsWon}</span>
+            )}
             <span>{secondaryValue(match, i)}</span>
           </div>
         </div>
@@ -168,6 +177,32 @@ function PracticeCard() {
   );
 }
 
+/** During the bull-up: each thrower's distance from the bull. */
+function BullUpStrip() {
+  const bullUp = useGameStore((s) => s.bullUp);
+  const match = useGameStore((s) => s.match);
+  if (!bullUp || !match) return null;
+  return (
+    <div className="turn-strip" data-testid="bull-up">
+      <div className="chips">
+        {bullUp.throwers.map((i) => {
+          const d = bullUp.distances[i];
+          return (
+            <span key={i} className={`chip wide${d !== undefined ? ' filled' : ''}`}>
+              {match.players[i]!.name}{' '}
+              {d === undefined ? '' : Number.isFinite(d) ? `${Math.round(d)} mm` : 'off'}
+            </span>
+          );
+        })}
+      </div>
+      <div className="checkout">
+        Bull-up{bullUp.round > 1 ? ` (throw ${bullUp.round})` : ''} · closest to the bull throws
+        first
+      </div>
+    </div>
+  );
+}
+
 function TurnStrip() {
   const match = useGameStore((s) => s.match);
   const darts = useGameStore((s) => s.darts);
@@ -229,11 +264,22 @@ function Prompt() {
   const ai = useGameStore(currentAi);
   const meter = useGameStore((s) => s.throwControl === 'meter');
   const aiPressure = useGameStore((s) => currentAiIntent(s)?.pressure ?? 0);
+  const bullUp = useGameStore((s) => s.bullUp);
   const name = match?.players[match.current]?.name;
   const multi = (match?.players.length ?? 1) > 1;
 
   let text: string | null = null;
-  if (ai && phase !== 'turnOver') {
+  const winnerName = match ? match.players[match.legWinner ?? match.current]?.name : undefined;
+  if (bullUp && match) {
+    if (phase === 'turnOver') {
+      text =
+        bullUp.winner !== null
+          ? `${match.players[bullUp.winner]!.name} throws first · tap to start`
+          : 'A tie! Throw again · tap to collect';
+    } else if (phase === 'aiming') {
+      text = ai ? `${name} is going for the bull…` : `${name}: throw at the bull`;
+    }
+  } else if (ai && phase !== 'turnOver') {
     text = aiPressure >= 0.6 ? `${name} needs this one…` : `${name} is throwing…`;
   } else if (phase === 'aiming') {
     const how = meter ? 'drag to aim, hold Throw' : 'drag to aim, flick up';
@@ -244,7 +290,9 @@ function Prompt() {
     } else if (match.mode === 'x01' && match.status === 'bust') {
       text = `Bust! ${name} stays on ${match.players[match.current]!.remaining} · tap to continue`;
     } else if (match.status === 'legWon') {
-      text = `${name} wins leg ${match.leg}! · tap for the next leg`;
+      text = setJustWon(match)
+        ? `${winnerName} wins the set! · tap for set ${(match.set ?? 1) + 1}`
+        : `${winnerName} wins leg ${match.leg}! · tap for the next leg`;
     } else if (match.status === 'complete') {
       text = `${turnResult(match, name ?? '')} · tap to collect`;
     }
