@@ -58,8 +58,8 @@ export function pointInSector(sectorNumber: number, radiusMm: number): { x: numb
   return { x: Math.sin(a) * radiusMm, y: Math.cos(a) * radiusMm };
 }
 
-/** Radius (m) from the bull within which a dart sticks (board + surround); beyond it, it hits the wall and drops. */
-export const STICK_RADIUS = 0.42;
+/** Radius (m) from the bull within which a dart sticks (board + cushioned surround); beyond it, it hits the cabinet and drops. */
+export const STICK_RADIUS = 0.4;
 
 /**
  * Steel-tip dart dimensions (mm), shared by the collision model and the 3D model.

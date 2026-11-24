@@ -8,7 +8,8 @@ import { chalkboardTexture, paintingTexture, planksTexture } from './textures';
 
 const ROOM = { halfWidth: 2.2, height: 3, back: -0.04, front: 4.2 } as const;
 const WAINSCOT = 1.05;
-const CAB = { half: 0.33, depth: 0.05 } as const;
+/** Cabinet: half-width (m), depth from the wall (m), wall thickness (m). */
+const CAB = { half: 0.47, depth: 0.1, wall: 0.022 } as const;
 const DOOR_ANGLE = 0.26; // radians the cabinet doors sit away from the wall
 
 /** Reflections for metal darts from three's built-in procedural room (no download). */
@@ -153,25 +154,56 @@ export function Room() {
         <meshStandardMaterial color="#c9a227" metalness={0.7} roughness={0.35} />
       </mesh>
 
-      {/* Dartboard cabinet: back panel and two open doors */}
+      {/* Dartboard cabinet: a real box with depth, so the board sits inside a frame */}
       <mesh position={[0, WORLD.bullHeight, ROOM.back + 0.005]} receiveShadow>
         <boxGeometry args={[CAB.half * 2, CAB.half * 2, 0.01]} />
         <meshStandardMaterial map={tex.cabinet} roughness={0.6} />
       </mesh>
       {[-1, 1].map((side) => (
+        <group key={`walls${side}`}>
+          {/* left/right walls */}
+          <mesh
+            position={[
+              side * (CAB.half - CAB.wall / 2),
+              WORLD.bullHeight,
+              ROOM.back + CAB.depth / 2,
+            ]}
+            castShadow
+            receiveShadow
+          >
+            <boxGeometry args={[CAB.wall, CAB.half * 2, CAB.depth]} />
+            <meshStandardMaterial map={tex.cabinet} roughness={0.55} />
+          </mesh>
+          {/* top/bottom walls */}
+          <mesh
+            position={[
+              0,
+              WORLD.bullHeight + side * (CAB.half - CAB.wall / 2),
+              ROOM.back + CAB.depth / 2,
+            ]}
+            castShadow
+            receiveShadow
+          >
+            <boxGeometry args={[CAB.half * 2, CAB.wall, CAB.depth]} />
+            <meshStandardMaterial map={tex.cabinet} roughness={0.55} />
+          </mesh>
+        </group>
+      ))}
+      {/* Doors, hinged on the front edge and swung open almost flat */}
+      {[-1, 1].map((side) => (
         <group
           key={side}
-          position={[side * CAB.half, WORLD.bullHeight, ROOM.back + 0.01]}
+          position={[side * CAB.half, WORLD.bullHeight, ROOM.back + CAB.depth]}
           rotation={[0, -side * DOOR_ANGLE, 0]}
         >
-          <mesh position={[side * (CAB.half / 2), 0, 0.01]} castShadow receiveShadow>
+          <mesh position={[side * (CAB.half / 2), 0, -0.01]} castShadow receiveShadow>
             <boxGeometry args={[CAB.half, CAB.half * 2, 0.02]} />
             <meshStandardMaterial map={tex.cabinet} roughness={0.6} />
           </mesh>
           {/* Chalk scoreboard on the inside of the left door */}
           {side === -1 && (
-            <mesh position={[side * (CAB.half / 2), 0, 0.021]}>
-              <planeGeometry args={[CAB.half * 0.85, CAB.half * 1.7]} />
+            <mesh position={[side * (CAB.half / 2), 0, 0.001]}>
+              <planeGeometry args={[CAB.half * 0.82, CAB.half * 1.7]} />
               <meshStandardMaterial map={tex.chalk} roughness={0.95} />
             </mesh>
           )}
