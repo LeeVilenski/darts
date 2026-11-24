@@ -126,6 +126,8 @@ interface GameState extends Settings {
   /** Pre-match bull-up in progress (match.current tracks whoever is throwing). */
   bullUp: BullUpState | null;
   startGame(setup: GameSetup): void;
+  /** Remember a setup (e.g. a renamed player) without starting it. */
+  saveSetup(setup: GameSetup): void;
   quitToMenu(): void;
   setAim(aim: { x: number; y: number }): void;
   throwDart(aim: { x: number; y: number }, flick: FlickMetrics): void;
@@ -269,6 +271,11 @@ export const useGameStore = create<GameState>((set, get) => ({
       darts: [],
       practice: emptyPractice(),
     });
+  },
+
+  saveSetup(setup) {
+    writeJson(SETUP_KEY, setup);
+    set({ setup });
   },
 
   quitToMenu() {
