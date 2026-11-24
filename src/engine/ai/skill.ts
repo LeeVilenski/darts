@@ -14,28 +14,61 @@ export interface AiSkill {
   outlierChance: number;
   /** Think time before each dart (ms, min–max). */
   thinkMs: [number, number];
+  /** Extra scatter, as a fraction of sigmaMm, under full pressure (a match dart). */
+  nerve: number;
+  /** Extra chance of a loose dart under full pressure: bottling it. */
+  bottle: number;
+  /** Notices a treble blocked by its own darts and aims around it, or switches to T19. */
+  readsBlockers: boolean;
 }
 
 export const OUTLIER_FACTOR = 2.5;
 
-/** Calibrated with src/engine/ai/calibration.test.ts (simulated 501 legs). */
+/**
+ * Calibrated with src/engine/ai/calibration.test.ts (simulated 501 legs, with
+ * dart-on-dart collisions and nerves on finishing darts included).
+ */
 export const AI_SKILL: Record<AiLevel, AiSkill> = {
-  pub: { label: 'Pub', targetAverage: 40, sigmaMm: 20, outlierChance: 0.08, thinkMs: [700, 1300] },
+  pub: {
+    label: 'Pub',
+    targetAverage: 40,
+    sigmaMm: 17,
+    outlierChance: 0.08,
+    thinkMs: [700, 1300],
+    nerve: 0.5,
+    bottle: 0.14,
+    readsBlockers: false,
+  },
   club: {
     label: 'Club',
     targetAverage: 60,
-    sigmaMm: 13,
+    sigmaMm: 12,
     outlierChance: 0.06,
     thinkMs: [600, 1100],
+    nerve: 0.4,
+    bottle: 0.08,
+    readsBlockers: false,
   },
   county: {
     label: 'County',
     targetAverage: 80,
-    sigmaMm: 9,
+    sigmaMm: 8.4,
     outlierChance: 0.04,
     thinkMs: [500, 900],
+    nerve: 0.25,
+    bottle: 0.03,
+    readsBlockers: true,
   },
-  pro: { label: 'Pro', targetAverage: 100, sigmaMm: 6.2, outlierChance: 0.03, thinkMs: [400, 800] },
+  pro: {
+    label: 'Pro',
+    targetAverage: 100,
+    sigmaMm: 5.5,
+    outlierChance: 0.03,
+    thinkMs: [400, 800],
+    nerve: 0.15,
+    bottle: 0.01,
+    readsBlockers: true,
+  },
 };
 
 /** Launch tuning for an AI dart: a perfect flick with scatter as the only error. */

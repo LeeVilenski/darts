@@ -17,6 +17,13 @@ import {
 } from './engine';
 
 function impactSound(d: ThrownDart) {
+  const c = d.collision;
+  if (c?.kind === 'robinHood') {
+    playImpact('wire');
+    return playCheer(0.7);
+  }
+  // Steel on steel (or a flick of the flights) as it meets a dart already in the board.
+  if (c && !c.soft) playImpact('wire');
   if (d.result.kind === 'bounce') return playBounceOut();
   const imp = d.flight.impact;
   if (!imp || Math.hypot(imp.x, imp.y - WORLD.bullHeight) > STICK_RADIUS) {

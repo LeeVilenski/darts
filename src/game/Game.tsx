@@ -1,8 +1,13 @@
 import { Canvas, useThree } from '@react-three/fiber';
 import { useEffect, useRef } from 'react';
-import { AI_SKILL } from '../engine/ai/skill';
+import { aiThinkMs } from '../engine/ai/simulate';
 import { useGameAudio } from '../audio/useGameAudio';
-import { currentAi, useGameStore } from '../store/useGameStore';
+import {
+  currentAi,
+  currentAiIntent,
+  currentAiPersonality,
+  useGameStore,
+} from '../store/useGameStore';
 import { Hud } from '../ui/Hud';
 import { Menu } from '../ui/Menu';
 import { useKeyboardControls } from './input/useKeyboardControls';
@@ -71,6 +76,15 @@ function useImpactHold() {
   }, [phase, camera, aiFast, finishImpact]);
 }
 
+/** Think time before the AI's next dart: its tempo, and longer when the dart matters. */
+function aiThinkDelay(): number {
+  const s = useGameStore.getState();
+  const level = currentAi(s);
+  const personality = currentAiPersonality(s);
+  if (!level || !personality) return 0;
+  return aiThinkMs(level, personality, currentAiIntent(s)?.pressure ?? 0, Math.random());
+}
+
 /** Plays AI turns: think, throw, and collect the darts once the turn is over. */
 function useAiTurns() {
   const phase = useGameStore((s) => s.phase);
@@ -82,8 +96,7 @@ function useAiTurns() {
     if (screen !== 'game' || !match || !level) return;
     let t: number | undefined;
     if (phase === 'aiming' && match.status === 'open') {
-      const [lo, hi] = AI_SKILL[level].thinkMs;
-      const delay = aiFast ? AI_FAST_THINK_MS : lo + Math.random() * (hi - lo);
+      const delay = aiFast ? AI_FAST_THINK_MS : aiThinkDelay();
       t = window.setTimeout(() => useGameStore.getState().aiThrow(), delay);
     } else if (phase === 'turnOver' && match.status !== 'matchWon') {
       t = window.setTimeout(

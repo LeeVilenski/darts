@@ -1,15 +1,17 @@
 import { create } from 'zustand';
-import { planAiThrow } from '../engine/ai/simulate';
+import { personalityFor, type AiPersonality } from '../engine/ai/personality';
+import { aiIntent, planAiThrow } from '../engine/ai/simulate';
+import type { Collision, StuckDart } from '../engine/board/collision';
 import type { AiLevel } from '../engine/ai/skill';
 import type { BounceSetting, HitResult } from '../engine/board/resolveHit';
-import { resolveHit } from '../engine/board/resolveHit';
 import { DEFAULT_ATC, type AtcOptions } from '../engine/modes/aroundTheClock';
 import { DEFAULT_CRICKET, type CricketOptions } from '../engine/modes/cricket';
 import { toDartScore } from '../engine/modes/dart';
 import { applyMatchDart, createMatch, endMatchTurn, type MatchState } from '../engine/modes/match';
 import { DEFAULT_X01, type X01Options } from '../engine/modes/x01';
 import { recordMatch } from './lifetimeStats';
-import { simulateFlight, worldToBoardMm, type Flight } from '../engine/physics/ballistics';
+import { worldToBoardMm, type Flight } from '../engine/physics/ballistics';
+import { resolveDart, stuckDartOf } from '../engine/physics/resolveDart';
 import {
   computeLaunch,
   type AssistLevel,
@@ -25,6 +27,8 @@ export interface ThrownDart {
   launch: LaunchParams;
   flight: Flight;
   result: HitResult;
+  /** Contact with a dart already in the board (deflection or Robin Hood), if any. */
+  collision: Collision | null;
   /** True once the flight animation reached the board/floor. */
   landed: boolean;
 }
@@ -41,7 +45,7 @@ export type Quality = 'auto' | 'high' | 'low';
 /** A slow-motion replay of one dart, then continue to `then`. */
 export interface Replay {
   dartId: number;
-  reason: '180' | 'checkout' | 'bounce';
+  reason: '180' | 'checkout' | 'bounce' | 'robinHood';
   then: Exclude<Phase, 'replay'>;
 }
 export type Screen = 'menu' | 'game';
@@ -266,7 +270,10 @@ export const useGameStore = create<GameState>((set, get) => ({
     const s = get();
     const level = currentAi(s);
     if (!level || !s.match || s.phase !== 'aiming' || s.match.status !== 'open') return;
-    const { target, launch } = planAiThrow(s.match, level, rng);
+    const { target, launch } = planAiThrow(s.match, level, rng, {
+      personality: currentAiPersonality(s) ?? undefined,
+      stuck: stuckDarts(s.darts),
+    });
     launchDart(target.point, launch);
   },
 
@@ -338,29 +345,31 @@ export const useGameStore = create<GameState>((set, get) => ({
   },
 }));
 
-/** Big moments get a slow-motion replay: a 180, a checkout, or a bounce-out. */
+/** Big moments get a slow-motion replay: a 180, a checkout, a bounce-out or a Robin Hood. */
 function replayReason(match: MatchState, dart: ThrownDart): Replay['reason'] | null {
+  if (dart.result.kind === 'robinHood') return 'robinHood';
   if (dart.result.kind === 'bounce') return 'bounce';
   if (match.status === 'legWon' || match.status === 'matchWon') return 'checkout';
   if (match.mode === 'x01' && match.turn.points === 180) return '180';
   return null;
 }
 
-/** Fly a launched dart: precompute its flight and result, then animate it. */
+/** Darts of this turn still in the board, as obstacles for the next one. */
+export function stuckDarts(darts: ThrownDart[]): StuckDart[] {
+  return darts.map(stuckDartOf).filter((d): d is StuckDart => d !== null);
+}
+
+/**
+ * Fly a launched dart: precompute its flight and result (including any
+ * collision with darts already in the board), then animate it.
+ */
 function launchDart(aim: { x: number; y: number }, launch: LaunchParams) {
   const s = useGameStore.getState();
-  const flight = simulateFlight(launch.p0, launch.v0);
-  let result: HitResult;
-  if (flight.impact) {
-    const mm = worldToBoardMm(flight.impact);
-    result = resolveHit(mm.x, mm.y, rng, s.bounce);
-  } else {
-    result = { kind: 'miss', r: Infinity, angle: 0 };
-  }
+  const { flight, result, collision } = resolveDart(launch, stuckDarts(s.darts), rng, s.bounce);
   useGameStore.setState({
     phase: 'flight',
     aim,
-    darts: [...s.darts, { id: nextId++, launch, flight, result, landed: false }],
+    darts: [...s.darts, { id: nextId++, launch, flight, result, collision, landed: false }],
   });
 }
 
@@ -368,6 +377,20 @@ function launchDart(aim: { x: number; y: number }, launch: LaunchParams) {
 export function currentAi(s: Pick<GameState, 'setup' | 'match'>): AiLevel | null {
   if (s.setup.kind === 'practice' || !s.match) return null;
   return s.setup.players[s.match.current]?.ai ?? null;
+}
+
+/** The current AI player's character (derived from its name), or null for a human. */
+export function currentAiPersonality(s: Pick<GameState, 'setup' | 'match'>): AiPersonality | null {
+  if (!currentAi(s) || s.setup.kind === 'practice' || !s.match) return null;
+  return personalityFor(s.setup.players[s.match.current]!.name);
+}
+
+/** What the current AI will aim at next and how much rides on it, or null for a human. */
+export function currentAiIntent(s: Pick<GameState, 'setup' | 'match' | 'darts'>) {
+  const level = currentAi(s);
+  const personality = currentAiPersonality(s);
+  if (!level || !personality || !s.match || s.match.status !== 'open') return null;
+  return aiIntent(s.match, level, { personality, stuck: stuckDarts(s.darts) });
 }
 
 /** Reset the RNG (tests / future replays). */

@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { describePersonality, personalityFor } from '../engine/ai/personality';
 import { AI_LEVELS, AI_SKILL, type AiLevel } from '../engine/ai/skill';
 import { DEFAULT_ATC, type AtcOptions } from '../engine/modes/aroundTheClock';
 import { DEFAULT_CRICKET } from '../engine/modes/cricket';
@@ -190,6 +191,11 @@ export function Menu() {
                             {AI_SKILL[level].label}
                           </button>
                         ))}
+                      </div>
+                    )}
+                    {p.ai && (
+                      <div className="personality" data-testid="ai-personality">
+                        {describePersonality(personalityFor(p.name || botName(p.ai)))}
                       </div>
                     )}
                   </div>

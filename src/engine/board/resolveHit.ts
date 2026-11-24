@@ -17,6 +17,8 @@ export type HitResult =
       angle: number;
     }
   | { kind: 'bounce'; r: number; angle: number }
+  /** Lodged in the back of a dart already in the board: sticks, but scores nothing. */
+  | { kind: 'robinHood'; r: number; angle: number }
   | { kind: 'miss'; r: number; angle: number };
 
 /** Probability of a bounce-out when the dart tip lands dead-centre on a wire. */

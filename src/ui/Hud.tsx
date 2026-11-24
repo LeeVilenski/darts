@@ -2,9 +2,16 @@ import { useState } from 'react';
 import type { HitResult } from '../engine/board/resolveHit';
 import { AI_SKILL } from '../engine/ai/skill';
 import { CRICKET_TARGETS, type CricketState } from '../engine/modes/cricket';
+import { toDartScore } from '../engine/modes/dart';
 import type { MatchState } from '../engine/modes/match';
 import { ASSIST } from '../engine/physics/throwModel';
-import { currentAi, DARTS_PER_TURN, useGameStore, type ThrownDart } from '../store/useGameStore';
+import {
+  currentAi,
+  currentAiIntent,
+  DARTS_PER_TURN,
+  useGameStore,
+  type ThrownDart,
+} from '../store/useGameStore';
 import { MatchOver } from './MatchOver';
 import { PowerMeter } from './PowerMeter';
 import { Tutorial } from './Tutorial';
@@ -18,9 +25,25 @@ export const resultLabel = (r: HitResult) =>
       : r.label
     : r.kind === 'bounce'
       ? 'Bounce out'
-      : 'Miss';
-const chipLabel = (label: string) =>
-  label === 'BULL' ? 'Bull' : label === 'MISS' ? 'Miss' : label === 'BOUNCE' ? 'Bounce' : label;
+      : r.kind === 'robinHood'
+        ? 'Robin Hood!'
+        : 'Miss';
+const CHIP_LABEL: Record<string, string> = {
+  BULL: 'Bull',
+  MISS: 'Miss',
+  BOUNCE: 'Bounce',
+  ROBIN: 'Robin',
+};
+const chipLabel = (label: string) => CHIP_LABEL[label] ?? label;
+
+/** Second line under the score pop: what the dart hit on the way, or how the weight was. */
+function collisionNote(d: ThrownDart): string | null {
+  const c = d.collision;
+  if (!c) return null;
+  if (c.kind === 'robinHood') return 'Buried in the back of a dart · scores nothing';
+  if (c.bounce) return 'Knocked out by a dart in the board';
+  return c.soft ? 'Brushed the flights' : 'Deflected off a dart';
+}
 const points = (d: ThrownDart) => (d.result.kind === 'score' ? d.result.points : 0);
 
 export function Hud() {
@@ -151,7 +174,7 @@ function TurnStrip() {
   const landed = darts.filter((d) => d.landed);
   const labels = match
     ? match.turn.darts.map((d) => d.label)
-    : landed.map((d) => (d.result.kind === 'score' ? d.result.label : d.result.kind.toUpperCase()));
+    : landed.map((d) => toDartScore(d.result).label);
   const total = match ? turnTotal(match) : String(landed.reduce((s, d) => s + points(d), 0));
   const hint = match ? turnHint(match) : null;
 
@@ -194,7 +217,7 @@ function ScorePop() {
       <div className="label" data-testid="last-score">
         {resultLabel(last.result)}
       </div>
-      <div className="weight">{weight}</div>
+      <div className="weight">{collisionNote(last) ?? weight}</div>
     </div>
   );
 }
@@ -205,12 +228,13 @@ function Prompt() {
   const darts = useGameStore((s) => s.darts);
   const ai = useGameStore(currentAi);
   const meter = useGameStore((s) => s.throwControl === 'meter');
+  const aiPressure = useGameStore((s) => currentAiIntent(s)?.pressure ?? 0);
   const name = match?.players[match.current]?.name;
   const multi = (match?.players.length ?? 1) > 1;
 
   let text: string | null = null;
   if (ai && phase !== 'turnOver') {
-    text = `${name} is throwing…`;
+    text = aiPressure >= 0.6 ? `${name} needs this one…` : `${name} is throwing…`;
   } else if (phase === 'aiming') {
     const how = meter ? 'drag to aim, hold Throw' : 'drag to aim, flick up';
     text = multi ? `${name} to throw · ${how}` : how[0]!.toUpperCase() + how.slice(1);
@@ -237,6 +261,7 @@ const REPLAY_TITLE = {
   '180': 'One hundred and eighty!',
   checkout: 'Game shot',
   bounce: 'Bounce out',
+  robinHood: 'Robin Hood!',
 } as const;
 
 function ReplayBadge() {

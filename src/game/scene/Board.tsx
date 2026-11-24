@@ -1,5 +1,5 @@
 import { useEffect, useMemo } from 'react';
-import { BOARD, WORLD } from '../../engine/board/geometry';
+import { BOARD, STICK_RADIUS, WORLD } from '../../engine/board/geometry';
 import { useGameStore } from '../../store/useGameStore';
 import { createBoardTexture, createSisalBump } from './boardTexture';
 import { BoardWires } from './BoardWires';
@@ -41,5 +41,4 @@ export function Board() {
   );
 }
 
-/** Radius (m) from bull within which a dart sticks on the board plane (board + surround). */
-export const STICK_RADIUS = 0.42;
+export { STICK_RADIUS };

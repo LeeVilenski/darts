@@ -49,7 +49,8 @@ const DOUBLE_PREF = [
   'D1',
   'BULL',
 ];
-const doubleRank = (label: string) => {
+const doubleRank = (label: string, favourite?: string) => {
+  if (label === favourite) return -1;
   const i = DOUBLE_PREF.indexOf(label);
   return i < 0 ? DOUBLE_PREF.length : i;
 };
@@ -60,17 +61,24 @@ const cache = new Map<string, string[] | null>();
 /**
  * Suggested checkout route for a double-out finish of `remaining` using at most
  * `dartsLeft` darts, e.g. 170 -> ["T20", "T20", "BULL"]. Null when no finish exists.
+ * `favourite` (e.g. "D16") wins ties between otherwise equal routes.
  */
-export function suggestCheckout(remaining: number, dartsLeft: number): string[] | null {
+export function suggestCheckout(
+  remaining: number,
+  dartsLeft: number,
+  favourite?: string,
+): string[] | null {
   if (remaining < 2 || remaining > 170 || dartsLeft < 1) return null;
-  const key = `${remaining}/${dartsLeft}`;
+  const key = `${remaining}/${dartsLeft}/${favourite ?? ''}`;
   if (cache.has(key)) return cache.get(key)!;
 
   let best: { route: string[]; score: number } | null = null;
   const consider = (setup: Seg[], fin: Seg) => {
     // Fewer darts dominates; then easier set-up darts; then preferred double.
     const score =
-      setup.length * 1000 + setup.reduce((s, x) => s + x.cost, 0) * 10 + doubleRank(fin.label);
+      setup.length * 1000 +
+      setup.reduce((s, x) => s + x.cost, 0) * 10 +
+      doubleRank(fin.label, favourite);
     if (!best || score < best.score)
       best = { route: [...setup.map((x) => x.label), fin.label], score };
   };

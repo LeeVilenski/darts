@@ -13,15 +13,21 @@ See [`docs/PLAN.md`](docs/PLAN.md) for the full implementation plan and mileston
 - Prefer a power bar? Settings → Throwing → **Power meter**: hold the Throw button and release in the green.
 - **Keyboard:** arrow keys aim (Shift for fine), hold **Space** and release in the green to throw,
   Space also collects darts and skips replays.
-- The camera follows your dart, AI throws get a TV side angle, and 180s, checkouts and bounce-outs get a
-  slow-motion replay (tap to skip). **Reduced motion** in Settings turns this off.
+- Darts already in the board get in the way: a tight group can **deflect** the next dart off a barrel,
+  brush the flights, knock it out of the board, or, very rarely, let it bury itself in the back of
+  another dart (a **Robin Hood**: it stays there and scores nothing).
+- AI opponents feel the **pressure** of leg and match darts, missed doubles and an opponent on a finish,
+  and each has a character derived from its name (nerves, throwing tempo, favourite double), shown under
+  its seat in the menu. County and Pro bots aim around their own darts in a covered treble, or switch to T19.
+- The camera follows your dart, AI throws get a TV side angle, and 180s, checkouts, bounce-outs and Robin
+  Hoods get a slow-motion replay (tap to skip). **Reduced motion** in Settings turns this off.
 - A first-run tutorial walks through aiming and throwing; replay it from the menu.
 - **Stats** keeps lifetime records per player; optional accounts sync them (docs/ACCOUNTS.md).
 - Installable as an app and playable offline after the first visit.
 
 ## Settings
 
-Aim assist, bounce-outs (realistic / low / off), throwing (flick / power meter), board colours
+Aim assist, bounce-outs (realistic / low / off; also how often a dart is knocked out by another), throwing (flick / power meter), board colours
 (classic / colour-blind), camera (cinematic / reduced motion), replays, graphics (auto / high / battery
 saver), sound, caller and pub ambience.
 
