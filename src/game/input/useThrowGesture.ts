@@ -2,7 +2,7 @@ import { useEffect, type RefObject } from 'react';
 import { analyzeFlick, type PointerSample } from '../../engine/physics/gesture';
 import { currentAi, useGameStore } from '../../store/useGameStore';
 import { visibleHalfHeight } from '../scene/camera';
-import { pointerHold } from './holding';
+import { flashAimHint, pointerHold, steadyAim } from './holding';
 
 /** Aim moves slower than the finger for fine control (fraction of 1:1 on-screen mapping). */
 const AIM_SENSITIVITY = 0.5;
@@ -10,8 +10,9 @@ const HISTORY_MS = 1000;
 
 /**
  * Aim-then-flick input on a DOM element layered over the canvas.
- * Drag to move the aim (relative), flick upward and release to throw.
- * A slow release only finishes aiming.
+ * Drag to move the aim (relative), hold still a moment, then flick upward and
+ * release to throw. A slow release, or lifting off part-way through moving the
+ * aim, only finishes aiming (see SteadyTracker).
  */
 export function useThrowGesture(el: RefObject<HTMLElement | null>) {
   useEffect(() => {
@@ -35,6 +36,7 @@ export function useThrowGesture(el: RefObject<HTMLElement | null>) {
         store.setAim({ x: store.aim.x + (x - last.x) * k, y: store.aim.y - (y - last.y) * k });
       }
       last = { x, y };
+      steadyAim.add(x, y, t);
       trail.push({ x, y, t });
       const aim = useGameStore.getState().aim;
       aimTrail.push({ t, x: aim.x, y: aim.y });
@@ -70,6 +72,7 @@ export function useThrowGesture(el: RefObject<HTMLElement | null>) {
       last = null;
       trail = [];
       aimTrail = [];
+      steadyAim.start(e.clientX, e.clientY, e.timeStamp, node.clientHeight || window.innerHeight);
       record(e.clientX, e.clientY, e.timeStamp);
       e.preventDefault();
     };
@@ -89,6 +92,11 @@ export function useThrowGesture(el: RefObject<HTMLElement | null>) {
       const store = useGameStore.getState();
       // In power-meter mode dragging only aims; the Throw button throws.
       if (!flick.isThrow || store.throwControl === 'meter') return;
+      // Released while still moving the aim: that's the end of aiming, not a throw.
+      if (!steadyAim.armed(e.timeStamp)) {
+        flashAimHint();
+        return;
+      }
       // Use the aim from just before the flick began, so the flick itself doesn't drag the aim.
       let aim = aimTrail[0] ?? { ...store.aim, t: 0 };
       for (const a of aimTrail) if (a.t < flick.flickStart) aim = a;

@@ -64,7 +64,7 @@ export function Tutorial() {
     'Drag anywhere to move the aim marker. It moves slower than your finger for fine control. (Keyboard: arrow keys.)',
     meter
       ? 'Hold the Throw button and release when the bar is in the green zone.'
-      : 'Now flick up and let go. Flick speed is the weight: too hard lands high, too soft lands low. (Keyboard: hold Space, release in the green.)',
+      : 'Hold still for a moment (the marker tightens), then flick up and let go. Moving the aim never throws. Flick speed is the weight: too hard lands high, too soft lands low. (Keyboard: hold Space, release in the green.)',
     'Nice! The note under the score tells you whether the weight was right. Tilting a flick pushes the dart sideways.',
   ][step];
 

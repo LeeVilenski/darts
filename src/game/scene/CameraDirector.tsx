@@ -8,7 +8,7 @@ import {
   useGameStore,
   type ThrownDart,
 } from '../../store/useGameStore';
-import { isHolding } from '../input/holding';
+import { isReadyToThrow } from '../input/holding';
 import { STICK_RADIUS } from './Board';
 import {
   BOARD_CAM,
@@ -84,7 +84,7 @@ type ShotKind = 'lane' | 'board' | 'other';
 /**
  * Chooses a shot for the current phase and eases the camera toward it.
  *
- * - Aiming: the player's eye at the oche, breathing slightly, pushing in while a dart is held.
+ * - Aiming: the player's eye at the oche, breathing slightly, pushing in once the aim is steady.
  * - Flight: the eye follows the dart in; on the last dart of a turn or a finishing dart a
  *   chase cam rides behind it instead.
  * - Impact / turn over: an angled close-up, low and to the side, so stuck darts show in profile.
@@ -217,8 +217,8 @@ export function CameraDirector() {
         closeUp(centre, spread);
       } else oche();
     } else {
-      // Aiming: push in a touch while a dart is held, like focusing on the target.
-      const holding = s.screen === 'game' && !reduced && isHolding();
+      // Aiming: push in a touch once the aim is steady and a throw would go, like focusing on the target.
+      const holding = s.screen === 'game' && !reduced && isReadyToThrow();
       oche(holding ? OCHE_HALF * 0.9 : OCHE_HALF);
     }
 

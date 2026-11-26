@@ -15,8 +15,10 @@ See [`docs/PLAN.md`](docs/PLAN.md) for the full implementation plan and mileston
   or **Practice** (with a heatmap). Up to 4 players share one device; any seat can be an AI opponent
   (Pub / Club / County / Pro). Multi-player matches can start with a **bull-up** to decide who throws
   first, and the throw alternates every leg (and every set).
-- **Drag** to move the aim marker, then **flick up and release** to throw. Flick speed is the weight
-  (too hard lands high, too soft low); tilting the flick pushes the dart sideways.
+- **Drag** to move the aim marker, **hold still** a moment (the marker tightens and the dart draws back),
+  then **flick up and release** to throw. Moving the aim never throws: letting go mid-drag just ends
+  aiming. Flick speed is the weight (too hard lands high, too soft low); tilting the flick pushes the
+  dart sideways.
 - Prefer a power bar? Settings → Throwing → **Power meter**: hold the Throw button and release in the green.
 - **Keyboard:** arrow keys aim (Shift for fine), hold **Space** and release in the green to throw,
   Space also collects darts and skips replays.
