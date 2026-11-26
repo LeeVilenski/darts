@@ -4,7 +4,16 @@ import { Quaternion, Vector3 } from 'three';
 export const dartTracker = {
   id: -1,
   position: new Vector3(),
+  /** Flight time (s) of that dart; negative during a replay's lead-in before release. */
+  time: 0,
 };
+
+/** When the current live AI dart leaves (or left) the thrower's hand (performance.now() ms). */
+export const throwerClock = { releaseAt: -Infinity };
+
+if (import.meta.env.DEV && typeof window !== 'undefined') {
+  (window as unknown as { __throwerClock: typeof throwerClock }).__throwerClock = throwerClock;
+}
 
 /**
  * World pose of the dart held in the player's hand, written every frame by HeldDart.

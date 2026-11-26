@@ -2,13 +2,9 @@ import { useFrame, useThree } from '@react-three/fiber';
 import { useRef } from 'react';
 import { Vector3, type PerspectiveCamera } from 'three';
 import { WORLD } from '../../engine/board/geometry';
-import {
-  currentAi,
-  currentAiIntent,
-  useGameStore,
-  type ThrownDart,
-} from '../../store/useGameStore';
-import { isHolding } from '../input/holding';
+import { RELEASE_POINT } from '../../engine/physics/throwModel';
+import { currentAi, useGameStore, type ThrownDart } from '../../store/useGameStore';
+import { isReadyToThrow } from '../input/holding';
 import { STICK_RADIUS } from './Board';
 import {
   BOARD_CAM,
@@ -18,15 +14,27 @@ import {
   CHASE,
   fovToFrame,
   kickOffset,
-  LANE_CAM,
   OCHE_HALF,
+  OPPONENT,
+  type OpponentFraming,
   shouldChase,
 } from './camera';
 import { cameraKick, dartTracker } from './dartTracker';
 
 const BULL = new Vector3(0, WORLD.bullHeight, 0);
 const OCHE = new Vector3(CAMERA_POS.x, CAMERA_POS.y, CAMERA_POS.z);
-const LANE_POS = new Vector3(LANE_CAM.pos.x, LANE_CAM.pos.y, LANE_CAM.pos.z);
+const RELEASE = new Vector3(RELEASE_POINT.x, RELEASE_POINT.y, RELEASE_POINT.z);
+/** Camera position and look point for an opponent framing. */
+const opponentShot = (f: OpponentFraming) => ({
+  pos: new Vector3(f.pos.x, f.pos.y, f.pos.z),
+  look: RELEASE.clone()
+    .lerp(BULL, f.lookToBoard)
+    .add(new Vector3(0, -f.lookDrop, 0)),
+});
+const OPP = {
+  landscape: opponentShot(OPPONENT.landscape),
+  portrait: opponentShot(OPPONENT.portrait),
+};
 /** How quickly the camera converges on each shot (1/s). */
 const RATE = { aiming: 4.5, flight: 9, impact: 5, replay: 7, turnOver: 4 } as const;
 /** The board-cam operator pans more gently than the other shots (1/s). */
@@ -46,7 +54,7 @@ const MENU_SHOT = {
     half: 0.36,
   },
 };
-/** In replays, cut from the lane shot to the board cam this close to the board (m). */
+/** In replays, cut from the side-on shot to the board cam this close to the board (m). */
 const REPLAY_BOARD_CAM_Z = 0.6;
 /** How quickly the aiming sway fades in/out (1/s). */
 const SWAY_RATE = 2.5;
@@ -64,9 +72,6 @@ const stuckImpact = (d: ThrownDart): Vector3 | null => {
   return new Vector3(imp.x, imp.y, imp.z);
 };
 
-const boardMm = (mm: { x: number; y: number }) =>
-  new Vector3(mm.x / 1000, WORLD.bullHeight + mm.y / 1000, 0);
-
 /**
  * A camera shot. Instead of a field of view we keep the half-extent to frame
  * around `look`; the FOV is derived each frame from the camera's actual
@@ -79,17 +84,18 @@ interface Shot {
 }
 
 /** Broadcast shots are cut to; the rest (oche, chase, close-ups) are flown between. */
-type ShotKind = 'lane' | 'board' | 'other';
+type ShotKind = 'replay' | 'board' | 'opponent' | 'other';
 
 /**
  * Chooses a shot for the current phase and eases the camera toward it.
  *
- * - Aiming: the player's eye at the oche, breathing slightly, pushing in while a dart is held.
+ * - Aiming: the player's eye at the oche, breathing slightly, pushing in once the aim is steady.
  * - Flight: the eye follows the dart in; on the last dart of a turn or a finishing dart a
  *   chase cam rides behind it instead.
  * - Impact / turn over: an angled close-up, low and to the side, so stuck darts show in profile.
- * - AI turns: the TV board cam holds on the target bed for the whole turn and pans as darts land.
- * - Replays: a high lane shot from behind the thrower, cutting to the board cam for the strike.
+ * - AI turns: watched from beside the oche like the opponent, the thrower in the foreground and the
+ *   board beyond; a beat after each dart lands, a cut to the board cam shows where it went.
+ * - Replays: the side-on view, tighter and following the dart in slow motion, then the board cam.
  *
  * Reduced motion cuts between oche and close-ups and never follows, sways or shakes.
  */
@@ -102,6 +108,8 @@ export function CameraDirector() {
   const sway = useRef(0);
   const elapsed = useRef(0);
   const scratch = useRef({ pos: new Vector3(), look: new Vector3() });
+  /** The phase we're in and when it started (s of `elapsed`). */
+  const phaseClock = useRef({ phase: '', since: 0 });
 
   useFrame((_, rawDelta) => {
     const delta = Math.min(rawDelta, 0.1);
@@ -131,12 +139,6 @@ export function CameraDirector() {
       want.half = BOARD_CAM.half;
       ease.rate = BOARD_PAN_RATE;
     };
-    /** High and behind the thrower, panning with the dart so it and the board share the frame. */
-    const laneCam = (tip: Vector3) => {
-      want.pos.copy(LANE_POS);
-      want.look.copy(tip).lerp(BULL, LANE_CAM.boardBias);
-      want.half = LANE_CAM.half;
-    };
 
     /**
      * Menu backdrop: an angled hero shot of the board with darts in it, placed
@@ -154,7 +156,19 @@ export function CameraDirector() {
     const phase = s.screen === 'menu' ? 'aiming' : s.phase;
     const last = s.darts[s.darts.length - 1];
     const ai = s.screen === 'game' ? currentAi(s) : null;
-    const aiCam = !reduced && ai !== null && s.match !== null;
+    const aiCam = ai !== null && s.match !== null;
+    if (phaseClock.current.phase !== phase) phaseClock.current = { phase, since: elapsed.current };
+    const inPhase = elapsed.current - phaseClock.current.since;
+    /** Standing beside the oche like the opponent: the thrower in the foreground, the board beyond. */
+    const opponent = (track: Vector3 | null, replay = false) => {
+      const framing = aspect >= 1 ? OPPONENT.landscape : OPPONENT.portrait;
+      const shot = aspect >= 1 ? OPP.landscape : OPP.portrait;
+      want.pos.copy(shot.pos);
+      want.look.copy(shot.look);
+      if (track && !reduced) want.look.lerp(track, replay ? OPPONENT.replayTrack : OPPONENT.track);
+      want.half = replay ? framing.replayHalf : framing.half;
+      ease.rate = OPPONENT.panRate;
+    };
     let kind: ShotKind = 'other';
     const replayDart = s.replay ? s.darts.find((d) => d.id === s.replay!.dartId) : undefined;
 
@@ -169,21 +183,23 @@ export function CameraDirector() {
         boardCam(land);
         kind = 'board';
       } else {
-        laneCam(tip);
-        kind = 'lane';
+        // Side-on from beside the oche, following the dart (the thrower winds up in frame).
+        opponent(tip, true);
+        kind = 'replay';
       }
     } else if (aiCam && phase !== 'turnOver') {
-      // Hold the board cam on the target bed for the whole AI turn, like TV coverage.
-      // The AI's exact next target (personality, blockers); between legs fall back to the bull.
-      const intent = currentAiIntent(s);
-      const target = intent ? boardMm(intent.target.point) : BULL.clone();
+      // AI turns are watched from beside the oche: the thrower winds up and lets go, the dart
+      // flies down the lane and strikes. A beat after it lands, cut in to the board cam.
       const land = last && phase !== 'aiming' ? landingPoint(last) : null;
-      if (land && (phase === 'impact' || land.distanceTo(target) > BOARD_CAM.half * 0.6))
+      if (phase === 'impact' && land && inPhase > OPPONENT.holdAfterImpact) {
         boardCam(land);
-      else if (land) boardCam(target.lerp(land, 0.5));
-      else if (phase === 'aiming' || !last) boardCam(target);
-      else oche(); // a dart that never reached the board
-      kind = ease.rate !== null ? 'board' : 'other';
+        kind = 'board';
+      } else {
+        const tip =
+          phase === 'flight' && last && dartTracker.id === last.id ? dartTracker.position : null;
+        opponent(tip ?? (phase === 'impact' ? land : null));
+        kind = 'opponent';
+      }
     } else if (phase === 'flight' && last && !reduced) {
       const end = last.flight.samples[last.flight.samples.length - 1]!.p;
       const endV = new Vector3(end.x, end.y, end.z);
@@ -217,8 +233,8 @@ export function CameraDirector() {
         closeUp(centre, spread);
       } else oche();
     } else {
-      // Aiming: push in a touch while a dart is held, like focusing on the target.
-      const holding = s.screen === 'game' && !reduced && isHolding();
+      // Aiming: push in a touch once the aim is steady and a throw would go, like focusing on the target.
+      const holding = s.screen === 'game' && !reduced && isReadyToThrow();
       oche(holding ? OCHE_HALF * 0.9 : OCHE_HALF);
     }
 

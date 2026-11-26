@@ -102,6 +102,8 @@ interface FlyingDartProps {
   hidden?: boolean;
   /** Start from the beginning even if the dart already landed (replays). */
   replay?: boolean;
+  /** Replays: start this many (sim) seconds before release, hidden in the thrower's hand. */
+  lead?: number;
 }
 
 /** One thrown dart: plays its precomputed flight, then sticks, bounces out or lies on the floor. */
@@ -112,9 +114,10 @@ export function FlyingDart({
   trackerId,
   hidden,
   replay,
+  lead = 0,
 }: FlyingDartProps) {
   const ref = useRef<Group>(null);
-  const clock = useRef(dart.landed && !replay ? Infinity : 0);
+  const clock = useRef(dart.landed && !replay ? Infinity : replay ? -lead : 0);
   const reported = useRef(dart.landed && !replay);
   const landDart = useGameStore((s) => s.landDart);
   // A freshly thrown player dart starts from where it was held, then blends onto its flight.
@@ -149,6 +152,15 @@ export function FlyingDart({
     const t = clock.current;
     const { flight, launch } = dart;
     const T = flight.duration;
+    g.visible = !hidden && t >= 0;
+
+    if (t < 0) {
+      // Replay lead-in: the dart is still in the thrower's hand.
+      dartTracker.id = trackerId ?? dart.id;
+      dartTracker.time = t;
+      dartTracker.position.set(launch.p0.x, launch.p0.y, launch.p0.z);
+      return;
+    }
 
     if (t < T) {
       const s = sampleFlight(flight, t);
@@ -167,6 +179,7 @@ export function FlyingDart({
         g.quaternion.copy(handQ.copy(handoff.quaternion).slerp(g.quaternion, k));
       }
       dartTracker.id = trackerId ?? dart.id;
+      dartTracker.time = t;
       dartTracker.position.copy(g.position);
       return;
     }

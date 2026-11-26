@@ -3,7 +3,7 @@ import { useRef } from 'react';
 import { Group, Quaternion, Vector3, type PerspectiveCamera } from 'three';
 import { WORLD } from '../../engine/board/geometry';
 import { currentAi, DARTS_PER_TURN, useGameStore } from '../../store/useGameStore';
-import { isHolding } from '../input/holding';
+import { isReadyToThrow } from '../input/holding';
 import { CAMERA_POS } from './camera';
 import { DartModel, DART_LENGTH } from './Dart';
 import { handTracker } from './dartTracker';
@@ -36,8 +36,8 @@ const loft = new Quaternion();
 
 /**
  * The next dart, held in the player's throwing hand at the bottom of the oche
- * view and pointed at the aim marker. It draws back while the dart is held
- * (pointer down or charging), and hands its pose to the thrown dart so the
+ * view and pointed at the aim marker. It draws back once a throw would go
+ * (steady aim held, or charging the meter), and hands its pose to the thrown dart so the
  * flight visibly starts from the hand.
  */
 export function HeldDart() {
@@ -68,7 +68,7 @@ export function HeldDart() {
     }
     st.shown = true;
     st.raise = reduced ? 1 : Math.min(1, st.raise + delta / RAISE_S);
-    const cockTarget = isHolding() ? 1 : 0;
+    const cockTarget = isReadyToThrow() ? 1 : 0;
     st.cock += (cockTarget - st.cock) * (1 - Math.exp(-12 * delta));
     const ease = 1 - (1 - st.raise) ** 3;
 

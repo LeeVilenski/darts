@@ -91,3 +91,59 @@ export function analyzeFlick(samples: PointerSample[], viewportHeight: number): 
 
   return { isThrow, speed, angle, unsteadiness, curvature, flickStart };
 }
+
+/**
+ * How still the pointer must be (fraction of viewport height) and for how long (ms)
+ * to count as a steady aim.
+ */
+export const STEADY_RADIUS = 0.012;
+export const STEADY_MS = 120;
+/** A throw must be released within this long (ms) of leaving a steady aim. */
+export const ARM_MS = 350;
+
+/**
+ * Tells an aiming drag from a throw. Darts players aim, settle, then throw, so a
+ * flick only counts if it starts from a steady aim: the pointer held still for
+ * STEADY_MS (or just pressed down), then released within ARM_MS. Lifting your
+ * finger part-way through a fast aiming drag is just the end of aiming.
+ *
+ * Feed it pointer samples (any units, with the viewport height in the same
+ * units) and timestamps in ms.
+ */
+export class SteadyTracker {
+  private ax = 0;
+  private ay = 0;
+  /** When the pointer arrived at the current anchor. */
+  private at = -Infinity;
+  /** When the pointer last left a steady aim (or was pressed down). */
+  private restEnd = -Infinity;
+  private eps = 1;
+
+  /** Pointer pressed down: landing your finger counts as a steady start. */
+  start(x: number, y: number, t: number, viewportHeight: number) {
+    this.eps = STEADY_RADIUS * Math.max(viewportHeight, 1);
+    this.ax = x;
+    this.ay = y;
+    this.at = t;
+    this.restEnd = t;
+  }
+
+  add(x: number, y: number, t: number) {
+    if (Math.hypot(x - this.ax, y - this.ay) <= this.eps) return; // still steady
+    // Leaving the anchor: if we'd been there long enough, a steady aim just ended.
+    if (t - this.at >= STEADY_MS) this.restEnd = t;
+    this.ax = x;
+    this.ay = y;
+    this.at = t;
+  }
+
+  /** Is the pointer holding a steady aim right now? */
+  steady(now: number): boolean {
+    return now - this.at >= STEADY_MS;
+  }
+
+  /** Would a flick released at `now` count as a throw? */
+  armed(now: number): boolean {
+    return this.steady(now) || now - this.restEnd <= ARM_MS;
+  }
+}
