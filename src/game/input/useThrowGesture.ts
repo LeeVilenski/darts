@@ -2,6 +2,7 @@ import { useEffect, type RefObject } from 'react';
 import { analyzeFlick, type PointerSample } from '../../engine/physics/gesture';
 import { currentAi, useGameStore } from '../../store/useGameStore';
 import { visibleHalfHeight } from '../scene/camera';
+import { pointerHold } from './holding';
 
 /** Aim moves slower than the finger for fine control (fraction of 1:1 on-screen mapping). */
 const AIM_SENSITIVITY = 0.5;
@@ -60,6 +61,7 @@ export function useThrowGesture(el: RefObject<HTMLElement | null>) {
       store = useGameStore.getState();
       if (store.phase !== 'aiming' || pointerId !== null) return;
       pointerId = e.pointerId;
+      pointerHold.down = true;
       try {
         node.setPointerCapture(e.pointerId);
       } catch {
@@ -81,6 +83,7 @@ export function useThrowGesture(el: RefObject<HTMLElement | null>) {
     const up = (e: PointerEvent) => {
       if (e.pointerId !== pointerId) return;
       pointerId = null;
+      pointerHold.down = false;
       record(e.clientX, e.clientY, e.timeStamp);
       const flick = analyzeFlick(trail, node.clientHeight || window.innerHeight);
       const store = useGameStore.getState();
@@ -94,7 +97,9 @@ export function useThrowGesture(el: RefObject<HTMLElement | null>) {
     };
 
     const cancel = (e: PointerEvent) => {
-      if (e.pointerId === pointerId) pointerId = null;
+      if (e.pointerId !== pointerId) return;
+      pointerId = null;
+      pointerHold.down = false;
     };
 
     node.addEventListener('pointerdown', down);
@@ -106,6 +111,7 @@ export function useThrowGesture(el: RefObject<HTMLElement | null>) {
       node.removeEventListener('pointermove', move);
       node.removeEventListener('pointerup', up);
       node.removeEventListener('pointercancel', cancel);
+      pointerHold.down = false;
     };
   }, [el]);
 }
