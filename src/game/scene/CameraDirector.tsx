@@ -16,14 +16,18 @@ import {
   kickOffset,
   OCHE_HALF,
   OPPONENT,
+  PLAYER_CAM,
   type OpponentFraming,
   shouldChase,
 } from './camera';
-import { cameraKick, dartTracker } from './dartTracker';
+import { cameraKick, dartTracker, throwerClock } from './dartTracker';
+import { JOINTS } from './throwerPose';
 
 const BULL = new Vector3(0, WORLD.bullHeight, 0);
 const OCHE = new Vector3(CAMERA_POS.x, CAMERA_POS.y, CAMERA_POS.z);
 const RELEASE = new Vector3(RELEASE_POINT.x, RELEASE_POINT.y, RELEASE_POINT.z);
+const PLAYER_LOOK = JOINTS.head.clone().add(new Vector3(0, -PLAYER_CAM.drop, 0));
+const PLAYER_POS = PLAYER_LOOK.clone().addScaledVector(PLAYER_CAM.dir, PLAYER_CAM.dist);
 /** Camera position and look point for an opponent framing. */
 const opponentShot = (f: OpponentFraming) => ({
   pos: new Vector3(f.pos.x, f.pos.y, f.pos.z),
@@ -84,7 +88,7 @@ interface Shot {
 }
 
 /** Broadcast shots are cut to; the rest (oche, chase, close-ups) are flown between. */
-type ShotKind = 'replay' | 'board' | 'opponent' | 'other';
+type ShotKind = 'replay' | 'board' | 'opponent' | 'player' | 'other';
 
 /**
  * Chooses a shot for the current phase and eases the camera toward it.
@@ -187,6 +191,13 @@ export function CameraDirector() {
         opponent(tip, true);
         kind = 'replay';
       }
+    } else if (aiCam && phase === 'aiming' && performance.now() < throwerClock.playerCamUntil) {
+      // The AI player steps up: a front shot of them settling, pushing in slowly.
+      want.pos.copy(PLAYER_POS);
+      want.look.copy(PLAYER_LOOK);
+      want.half = lastShotKind.current === 'player' ? PLAYER_CAM.pushHalf : PLAYER_CAM.half;
+      ease.rate = PLAYER_CAM.pushRate;
+      kind = 'player';
     } else if (aiCam && phase !== 'turnOver') {
       // AI turns are watched from beside the oche: the thrower winds up and lets go, the dart
       // flies down the lane and strikes. A beat after it lands, cut in to the board cam.

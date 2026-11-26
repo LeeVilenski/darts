@@ -11,44 +11,76 @@ import { RELEASE_POINT } from '../../engine/physics/throwModel';
 /** Body placement: where the hips stand on the floor (world m), and its turn toward the board. */
 export const BODY = { x: -0.03, z: 2.56, yaw: 0.49 } as const;
 
-/** Body-local (x along the shoulders, +y up, -z forward) to world. */
+/** Body-local (x along the shoulders toward the throwing arm, +y up, -z forward) to world. */
 export function bodyToWorld(x: number, y: number, z: number): Vector3 {
   const c = Math.cos(BODY.yaw);
   const s = Math.sin(BODY.yaw);
   return new Vector3(BODY.x + x * c + z * s, y, BODY.z - x * s + z * c);
 }
 
-export const JOINTS = {
-  head: bodyToWorld(0.05, 1.69, -0.07),
-  hairOffset: new Vector3(0, 0.012, 0.012),
-  neck: bodyToWorld(0.02, 1.53, -0.04),
-  shoulderR: bodyToWorld(0.18, 1.44, -0.05),
-  shoulderL: bodyToWorld(-0.18, 1.42, 0),
-  chest: bodyToWorld(0, 1.3, -0.03),
-  hips: bodyToWorld(0, 0.97, 0),
-  hipR: bodyToWorld(0.09, 0.95, 0),
-  hipL: bodyToWorld(-0.09, 0.95, 0),
-  kneeR: new Vector3(0.09, 0.5, 2.45),
-  kneeL: new Vector3(-0.2, 0.5, 2.74),
-  footR: new Vector3(0.1, 0.05, 2.43),
-  footL: new Vector3(-0.24, 0.05, 2.86),
-  toeR: new Vector3(0.07, 0.04, 2.26),
-  toeL: new Vector3(-0.18, 0.04, 2.7),
-  elbowL: bodyToWorld(-0.2, 1.15, -0.03),
-  handL: bodyToWorld(-0.19, 0.9, -0.06),
-} as const;
+/** World to body-local (the inverse of bodyToWorld). */
+export function worldToBody(w: Vector3): Vector3 {
+  const c = Math.cos(BODY.yaw);
+  const s = Math.sin(BODY.yaw);
+  const dx = w.x - BODY.x;
+  const dz = w.z - BODY.z;
+  return new Vector3(dx * c - dz * s, w.y, dx * s + dz * c);
+}
 
-/** Which way the head faces: at the board, from the head. */
-export const FACING = new Vector3(0, 1.73, 0).sub(JOINTS.head).normalize();
-/** Face features, placed on the head relative to where it faces. */
-const sideways = new Vector3().crossVectors(FACING, new Vector3(0, 1, 0)).normalize();
-export const FACE = {
-  nose: JOINTS.head
-    .clone()
-    .addScaledVector(FACING, 0.1)
-    .add(new Vector3(0, -0.012, 0)),
-  earR: JOINTS.head.clone().addScaledVector(sideways, 0.094).addScaledVector(FACING, -0.01),
-  earL: JOINTS.head.clone().addScaledVector(sideways, -0.094).addScaledVector(FACING, -0.01),
+/** How tall and how wide a player is (multipliers around 1). */
+export interface Build {
+  height: number;
+  girth: number;
+}
+export const AVERAGE_BUILD: Build = { height: 1, girth: 1 };
+
+const v = (x: number, y: number, z: number) => new Vector3(x, y, z);
+
+/**
+ * Body joints in body-local coordinates for a build. Feet are planted where
+ * a darts player stands (front foot at the oche); height scales everything
+ * above them and girth scales widths.
+ */
+export function bodyJoints({ height: h, girth: g }: Build) {
+  const footR = worldToBody(v(0.1, 0.05, 2.43));
+  const footL = worldToBody(v(-0.24, 0.05, 2.86));
+  return {
+    head: v(0.05, 1.665 * h, -0.065),
+    neck: v(0.02, 1.52 * h, -0.04),
+    shoulderR: v(0.17 * g, 1.44 * h, -0.05),
+    shoulderL: v(-0.17 * g, 1.42 * h, 0),
+    waist: v(0, 0.93 * h, 0),
+    hipR: v(0.085 * g, 0.93 * h, 0),
+    hipL: v(-0.085 * g, 0.93 * h, 0),
+    kneeR: footR
+      .clone()
+      .lerp(v(0.085 * g, 0.93 * h, 0), 0.47)
+      .add(v(0, 0, -0.04)),
+    kneeL: footL
+      .clone()
+      .lerp(v(-0.085 * g, 0.93 * h, 0), 0.47)
+      .add(v(0, 0, -0.02)),
+    footR,
+    footL,
+    elbowL: v(-0.2 * g, 1.15 * h, -0.04),
+    handL: v(-0.19 * g, 0.91 * h, -0.08),
+  };
+}
+export type BodyJoints = ReturnType<typeof bodyJoints>;
+
+/** Throwing shoulder in world space for a build (where the upper arm hangs from). */
+export function shoulderWorld(build: Build): Vector3 {
+  const s = bodyJoints(build).shoulderR;
+  return bodyToWorld(s.x, s.y, s.z);
+}
+
+/** Joints for an average build, in world space (used by tests and as a reference). */
+export const JOINTS = {
+  shoulderR: shoulderWorld(AVERAGE_BUILD),
+  head: (() => {
+    const hd = bodyJoints(AVERAGE_BUILD).head;
+    return bodyToWorld(hd.x, hd.y, hd.z);
+  })(),
 } as const;
 
 /** Forearm length, elbow → grip (m). */
@@ -135,4 +167,31 @@ export function tipAt(tl: number, out = new Vector3()): Vector3 {
 /** Is a dart in the thrower's hand at `tl`? (Gone from release until it picks up the next.) */
 export function holdsDart(tl: number): boolean {
   return !Number.isFinite(tl) || tl < 0 || tl >= RESET_UNTIL_S - 0.2;
+}
+
+/** Resting arm while stepping up: upper arm hanging, forearm across the body, darts at chest height. */
+const REST_UPPER = new Vector3(0.02, -0.97, -0.14).normalize();
+/** Across the front of the body, toward the other hip (world: body-left with a little forward). */
+const REST_FORE = new Vector3(-0.91, 0.12, -0.05).normalize();
+
+/**
+ * Blend the throwing arm toward the resting pose by `rest` (0 = the throw pose
+ * given, 1 = fully at rest). The elbow stays on its circle round the shoulder,
+ * so the upper arm keeps its length.
+ */
+export function blendRest(shoulder: Vector3, elbow: Vector3, grip: Vector3, rest: number): void {
+  if (rest <= 0) return;
+  const upperLen = elbow.distanceTo(shoulder);
+  const upperDir = new Vector3()
+    .subVectors(elbow, shoulder)
+    .normalize()
+    .lerp(REST_UPPER, rest)
+    .normalize();
+  const foreDir = new Vector3()
+    .subVectors(grip, elbow)
+    .normalize()
+    .lerp(REST_FORE, rest)
+    .normalize();
+  elbow.copy(shoulder).addScaledVector(upperDir, upperLen);
+  grip.copy(elbow).addScaledVector(foreDir, FOREARM);
 }

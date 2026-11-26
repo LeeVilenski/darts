@@ -138,6 +138,82 @@ export function Room() {
         </group>
       ))}
 
+      {/* Soft fill from the board end, so the player's face reads in the player cam */}
+      <pointLight
+        position={[-0.7, 1.9, 1.4]}
+        intensity={0.5}
+        distance={3.2}
+        decay={2}
+        color="#ffe6cc"
+      />
+
+      {/* Front wall (behind the player), seen in the player cam: panelling, a door, pictures */}
+      <group position={[0, 0, ROOM.front]} rotation={[0, Math.PI, 0]}>
+        <mesh position={[0, (ROOM.height + WAINSCOT) / 2, 0]} receiveShadow>
+          <planeGeometry args={[ROOM.halfWidth * 2, ROOM.height - WAINSCOT]} />
+          <meshStandardMaterial color="#1f3a33" roughness={0.95} />
+        </mesh>
+        <mesh position={[0, WAINSCOT / 2, 0.002]} receiveShadow>
+          <planeGeometry args={[ROOM.halfWidth * 2, WAINSCOT]} />
+          <meshStandardMaterial map={tex.panel} roughness={0.7} />
+        </mesh>
+        <mesh position={[0, WAINSCOT, 0.02]}>
+          <boxGeometry args={[ROOM.halfWidth * 2, 0.04, 0.04]} />
+          <meshStandardMaterial map={tex.cabinet} roughness={0.6} />
+        </mesh>
+        {/* Door, to the thrower's left as you face them */}
+        <group position={[0.95, 0, 0.01]}>
+          <mesh position={[0, 1.02, 0.025]} castShadow receiveShadow>
+            <boxGeometry args={[0.86, 2.04, 0.05]} />
+            <meshStandardMaterial map={tex.cabinet} roughness={0.55} />
+          </mesh>
+          {[0.55, 1.45].map((y) => (
+            <mesh key={y} position={[0, y, 0.052]}>
+              <boxGeometry args={[0.62, 0.62, 0.012]} />
+              <meshStandardMaterial map={tex.cabinet} roughness={0.5} color="#c9b39a" />
+            </mesh>
+          ))}
+          <mesh position={[-0.34, 1.0, 0.07]}>
+            <sphereGeometry args={[0.028, 16, 12]} />
+            <meshStandardMaterial color="#c9a227" metalness={0.8} roughness={0.3} />
+          </mesh>
+          {/* Frame */}
+          {[-0.46, 0.46].map((x) => (
+            <mesh key={x} position={[x, 1.07, 0.03]}>
+              <boxGeometry args={[0.07, 2.14, 0.07]} />
+              <meshStandardMaterial map={tex.cabinet} roughness={0.6} />
+            </mesh>
+          ))}
+          <mesh position={[0, 2.12, 0.03]}>
+            <boxGeometry args={[0.99, 0.07, 0.07]} />
+            <meshStandardMaterial map={tex.cabinet} roughness={0.6} />
+          </mesh>
+        </group>
+        {/* Pictures and a warm sconce */}
+        {[
+          [-0.7, 1.85, 0.5, 0.62, 1],
+          [-1.55, 1.75, 0.34, 0.44, 0],
+        ].map(([x, y, w, h, art]) => (
+          <group key={x} position={[x!, y!, 0.015]}>
+            <mesh>
+              <boxGeometry args={[w! + 0.05, h! + 0.05, 0.02]} />
+              <meshStandardMaterial color="#2a1a0e" roughness={0.5} metalness={0.2} />
+            </mesh>
+            <mesh position={[0, 0, 0.011]}>
+              <planeGeometry args={[w!, h!]} />
+              <meshStandardMaterial map={tex.art[art!]} roughness={0.8} />
+            </mesh>
+          </group>
+        ))}
+        <group position={[0.2, 2.1, 0.06]}>
+          <mesh>
+            <sphereGeometry args={[0.05, 16, 12]} />
+            <meshStandardMaterial emissive="#ffb066" emissiveIntensity={2.5} color="#ffcf99" />
+          </mesh>
+          <pointLight intensity={0.8} distance={3} decay={2} color="#ffb066" />
+        </group>
+      </group>
+
       {/* Floor and ceiling */}
       <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0, midZ]} receiveShadow>
         <planeGeometry args={[ROOM.halfWidth * 2, depth]} />
