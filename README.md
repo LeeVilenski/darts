@@ -26,8 +26,10 @@ See [`docs/PLAN.md`](docs/PLAN.md) for the full implementation plan and mileston
 - AI opponents feel the **pressure** of leg and match darts, missed doubles and an opponent on a finish,
   and each has a character derived from its name (nerves, throwing tempo, favourite double), shown under
   its seat in the menu. County and Pro bots aim around their own darts in a covered treble, or switch to T19.
-- The camera follows your dart, AI throws get a TV side angle, and 180s, checkouts, bounce-outs and Robin
-  Hoods get a slow-motion replay (tap to skip). **Reduced motion** in Settings turns this off.
+- You see the next dart in your hand; your eye follows each throw in, with a chase cam on the last dart
+  of a turn and on finishing darts. AI turns get a TV board cam held on the target, and 180s, checkouts,
+  bounce-outs and Robin Hoods get a slow-motion replay from behind the thrower (tap to skip).
+  **Reduced motion** in Settings turns the follow, sway and shake off.
 - A first-run tutorial walks through aiming and throwing; replay it from the menu.
 - **Stats** keeps lifetime records per player; optional accounts sync them (docs/ACCOUNTS.md).
 - Installable as an app and playable offline after the first visit.

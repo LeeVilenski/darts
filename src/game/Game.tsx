@@ -17,6 +17,7 @@ import { CameraDirector } from './scene/CameraDirector';
 import { QualityGovernor } from './scene/quality';
 import { FlyingDart } from './scene/Dart';
 import { Heatmap } from './scene/Heatmap';
+import { HeldDart } from './scene/HeldDart';
 import { MenuDarts } from './scene/MenuDarts';
 import { Reticle } from './scene/Reticle';
 import { Room } from './scene/Room';
@@ -137,6 +138,7 @@ export default function Game() {
           <>
             <Reticle />
             <Darts />
+            <HeldDart />
             <Heatmap />
           </>
         )}

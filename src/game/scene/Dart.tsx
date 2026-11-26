@@ -1,5 +1,5 @@
 import { useFrame } from '@react-three/fiber';
-import { useMemo, useRef } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import {
   CylinderGeometry,
   ConeGeometry,
@@ -15,7 +15,7 @@ import { DART, WORLD } from '../../engine/board/geometry';
 import { GRAVITY, sampleFlight, type Vec3 } from '../../engine/physics/ballistics';
 import { useGameStore, type ThrownDart } from '../../store/useGameStore';
 import { STICK_RADIUS } from './Board';
-import { dartTracker } from './dartTracker';
+import { dartTracker, handTracker, kickCamera } from './dartTracker';
 
 // Shared geometry/materials. Dart tip at local origin, body along -Z.
 // Dimensions come from the engine so the collision model matches what you see.
@@ -25,6 +25,8 @@ const SHAFT_LEN = DART.shaftLength / 1000;
 const FLIGHT_LEN = DART.flightLength / 1000;
 const FLIGHT_HALF = DART.flightHalfSpan / 1000;
 const FLIGHT_OVERLAP = DART.flightOverlap / 1000;
+/** Tip to the back of the flights (m). */
+export const DART_LENGTH = TIP_LEN + BARREL_LEN + SHAFT_LEN - FLIGHT_OVERLAP + FLIGHT_LEN;
 
 const along = <T extends CylinderGeometry | ConeGeometry>(g: T, centerZ: number) => {
   g.rotateX(Math.PI / 2);
@@ -80,6 +82,12 @@ const axisZ = new Vector3(0, 0, 1);
 const EMBED = DART.embed / 1000;
 /** Post-impact flutter of a stuck dart (rad, 1/s, Hz). */
 const QUIVER = { amplitude: 0.06, damping: 7, frequency: 16 } as const;
+/** Time (s) over which a thrown dart blends from the hand pose onto its flight path. */
+const HANDOFF_S = 0.09;
+/** Ignore a hand pose older than this (ms). */
+const HANDOFF_MAX_AGE_MS = 250;
+const handQ = new Quaternion();
+const smoothstep = (x: number) => x * x * (3 - 2 * x);
 
 type After = 'stick' | 'bounce' | 'floor';
 
@@ -109,6 +117,22 @@ export function FlyingDart({
   const clock = useRef(dart.landed && !replay ? Infinity : 0);
   const reported = useRef(dart.landed && !replay);
   const landDart = useGameStore((s) => s.landDart);
+  // A freshly thrown player dart starts from where it was held, then blends onto its flight.
+  const [handoff] = useState(() =>
+    !replay &&
+    !dart.landed &&
+    handTracker.visible &&
+    performance.now() - handTracker.time < HANDOFF_MAX_AGE_MS
+      ? {
+          offset: new Vector3(
+            handTracker.position.x - dart.launch.p0.x,
+            handTracker.position.y - dart.launch.p0.y,
+            handTracker.position.z - dart.launch.p0.z,
+          ),
+          quaternion: handTracker.quaternion.clone(),
+        }
+      : null,
+  );
 
   const after: After = useMemo(() => {
     const imp = dart.flight.impact;
@@ -137,13 +161,20 @@ export function FlyingDart({
           Math.sin(2 * Math.PI * launch.wobble.frequency * t),
         launch.spin * t,
       );
+      if (handoff && t < HANDOFF_S) {
+        const k = smoothstep(t / HANDOFF_S);
+        g.position.addScaledVector(handoff.offset, 1 - k);
+        g.quaternion.copy(handQ.copy(handoff.quaternion).slerp(g.quaternion, k));
+      }
       dartTracker.id = trackerId ?? dart.id;
-      dartTracker.position.set(s.p.x, s.p.y, s.p.z);
+      dartTracker.position.copy(g.position);
       return;
     }
 
     if (!reported.current) {
       reported.current = true;
+      if (after === 'stick') kickCamera(replay ? 1.4 : 1);
+      else if (after === 'bounce') kickCamera(0.5);
       if (onLanded) onLanded();
       else landDart(dart.id);
     }
