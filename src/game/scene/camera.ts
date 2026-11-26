@@ -25,15 +25,47 @@ export const BOARD_CAM = {
   half: 0.115,
 } as const;
 
+/** One framing of the opponent's view. */
+export interface OpponentFraming {
+  pos: { x: number; y: number; z: number };
+  /** Look point: this far from the release point toward the bull (0–1)… */
+  lookToBoard: number;
+  /** …lowered this much (m) so the thrower's body is in frame too. */
+  lookDrop: number;
+  half: number;
+  /** Replays: framed tighter and following the dart more closely. */
+  replayHalf: number;
+}
+
 /**
- * Replay "lane cam": high and behind the thrower's right shoulder, looking down
- * the lane. It pans with the dart but keeps the board in frame (works in portrait).
+ * AI turns: you're the opponent, standing beside the oche, watching the
+ * thrower wind up and let go and the dart fly down the lane and strike.
+ * Landscape screens get a true side-on view; portrait is too narrow to hold the
+ * thrower and the board side by side, so it stands further behind their right
+ * shoulder, looking down the lane.
  */
-export const LANE_CAM = {
-  pos: { x: 0.42, y: 2.05, z: WORLD.ocheDistance + 1.05 },
-  /** How far the look point is pulled from the dart toward the bull (0–1). */
-  boardBias: 0.45,
-  half: 0.42,
+export const OPPONENT = {
+  landscape: {
+    pos: { x: 1.2, y: 1.6, z: WORLD.ocheDistance + 1.15 },
+    lookToBoard: 0.36,
+    lookDrop: 0.12,
+    half: 0.7,
+    replayHalf: 0.46,
+  } satisfies OpponentFraming,
+  portrait: {
+    pos: { x: 0.62, y: 1.62, z: WORLD.ocheDistance + 1.6 },
+    lookToBoard: 0.3,
+    lookDrop: 0.22,
+    half: 0.72,
+    replayHalf: 0.5,
+  } satisfies OpponentFraming,
+  /** How much the camera turns to follow the dart (0–1), live and in replays. */
+  track: 0.22,
+  replayTrack: 0.55,
+  /** Easing rate for those small pans (1/s). */
+  panRate: 3,
+  /** Stay wide this long after the dart lands before cutting to the board cam (s). */
+  holdAfterImpact: 0.5,
 } as const;
 
 /** Chase cam riding just behind and above the dart. */

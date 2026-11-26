@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { Vector3 } from 'three';
 import { WORLD } from '../../engine/board/geometry';
-import { breathOffset, CLOSE_DIR, kickOffset, LANE_CAM, shouldChase } from './camera';
+import { breathOffset, CLOSE_DIR, kickOffset, OPPONENT, shouldChase } from './camera';
 
 const deg = (rad: number) => (rad * 180) / Math.PI;
 
@@ -29,10 +29,15 @@ describe('camera angles', () => {
     expect(offAxis).toBeLessThan(45);
     expect(CLOSE_DIR.y).toBeLessThan(0); // looking up from below, like TV coverage
   });
-  it('the replay lane cam is behind the oche, above eye height, inside the room', () => {
-    expect(LANE_CAM.pos.z).toBeGreaterThan(WORLD.ocheDistance);
-    expect(LANE_CAM.pos.y).toBeGreaterThan(1.8);
-    expect(LANE_CAM.pos.y).toBeLessThan(3);
+  it('the opponent cam stands beside and behind the oche, inside the room', () => {
+    for (const f of [OPPONENT.landscape, OPPONENT.portrait]) {
+      expect(f.pos.z).toBeGreaterThan(WORLD.ocheDistance);
+      expect(f.pos.z).toBeLessThan(4.2);
+      expect(f.pos.x).toBeGreaterThan(0.5);
+      expect(f.pos.x).toBeLessThan(2.2);
+    }
+    // Landscape is the more side-on of the two.
+    expect(OPPONENT.landscape.pos.x).toBeGreaterThan(OPPONENT.portrait.pos.x);
   });
 });
 

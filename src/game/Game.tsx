@@ -21,6 +21,9 @@ import { HeldDart } from './scene/HeldDart';
 import { MenuDarts } from './scene/MenuDarts';
 import { Reticle } from './scene/Reticle';
 import { Room } from './scene/Room';
+import { REPLAY_LEAD_S, Thrower } from './scene/Thrower';
+import { throwerClock } from './scene/dartTracker';
+import { WINDUP_S } from './scene/throwerPose';
 
 /** How long the camera holds on a landed dart before returning to the oche (ms). */
 const IMPACT_HOLD = { cinematic: 1100, reduced: 700, fast: 250 } as const;
@@ -47,6 +50,7 @@ function Darts() {
           key={`replay-${replayed.id}`}
           dart={replayed}
           replay
+          lead={REPLAY_LEAD_S}
           timeScale={REPLAY_SPEED}
           trackerId={-replayed.id}
           onLanded={() => window.setTimeout(finishReplay, REPLAY_HOLD)}
@@ -99,7 +103,16 @@ function useAiTurns() {
     let t: number | undefined;
     if (phase === 'aiming' && match.status === 'open') {
       const delay = aiFast ? AI_FAST_THINK_MS : aiThinkDelay();
-      t = window.setTimeout(() => useGameStore.getState().aiThrow(), delay);
+      // The thrower draws back and drives forward for WINDUP_S before the dart leaves the hand.
+      const windup = aiFast ? 0 : WINDUP_S * 1000;
+      const think = Math.max(0, delay - windup);
+      t = window.setTimeout(() => {
+        throwerClock.releaseAt = performance.now() + windup;
+        t = window.setTimeout(() => {
+          throwerClock.releaseAt = performance.now();
+          useGameStore.getState().aiThrow();
+        }, windup);
+      }, think);
     } else if (phase === 'turnOver' && match.status !== 'matchWon') {
       t = window.setTimeout(
         () => useGameStore.getState().collectDarts(),
@@ -139,6 +152,7 @@ export default function Game() {
             <Reticle />
             <Darts />
             <HeldDart />
+            <Thrower />
             <Heatmap />
           </>
         )}
