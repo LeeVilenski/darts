@@ -57,3 +57,26 @@ export function pointInSector(sectorNumber: number, radiusMm: number): { x: numb
   const a = (idx * SECTOR_ANGLE * Math.PI) / 180;
   return { x: Math.sin(a) * radiusMm, y: Math.cos(a) * radiusMm };
 }
+
+/** Radius (m) from the bull within which a dart sticks (board + cushioned surround); beyond it, it hits the cabinet and drops. */
+export const STICK_RADIUS = 0.4;
+
+/**
+ * Steel-tip dart dimensions (mm), shared by the collision model and the 3D model.
+ * Lengths run from the point back toward the tail.
+ */
+export const DART = {
+  tipLength: 32,
+  barrelLength: 45,
+  shaftLength: 35,
+  flightLength: 36,
+  /** How far the flights overlap the end of the shaft. */
+  flightOverlap: 12,
+  /** How deep the point sinks into the board (or into another dart). */
+  embed: 7,
+  tipRadius: 1.0,
+  barrelRadius: 3.4,
+  shaftRadius: 1.7,
+  /** Half the span of the flights (they form a cross seen from behind). */
+  flightHalfSpan: 14,
+} as const;

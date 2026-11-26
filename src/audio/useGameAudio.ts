@@ -17,6 +17,13 @@ import {
 } from './engine';
 
 function impactSound(d: ThrownDart) {
+  const c = d.collision;
+  if (c?.kind === 'robinHood') {
+    playImpact('wire');
+    return playCheer(0.7);
+  }
+  // Steel on steel (or a flick of the flights) as it meets a dart already in the board.
+  if (c && !c.soft) playImpact('wire');
   if (d.result.kind === 'bounce') return playBounceOut();
   const imp = d.flight.impact;
   if (!imp || Math.hypot(imp.x, imp.y - WORLD.bullHeight) > STICK_RADIUS) {
@@ -70,7 +77,8 @@ export function useGameAudio() {
       );
       if (landed) impactSound(landed);
 
-      if (s.phase === 'turnOver' && prev.phase !== 'turnOver') {
+      // The bull-up isn't scored, so the caller stays quiet until the match starts.
+      if (s.phase === 'turnOver' && prev.phase !== 'turnOver' && !s.bullUp) {
         if (s.match) {
           const { keys, cheer } = callForTurnEnd(s.match);
           if (cheer) playCheer(cheer);
@@ -91,7 +99,7 @@ export function useGameAudio() {
         s.match.turn.darts.length === 0 &&
         s.phase === 'aiming' &&
         (prev.phase === 'turnOver' || prev.screen !== 'game' || prev.match === null);
-      if (turnStarted && s.match && !currentAi(s)) call(callForTurnStart(s.match));
+      if (turnStarted && s.match && !s.bullUp && !currentAi(s)) call(callForTurnStart(s.match));
     });
   }, []);
 }

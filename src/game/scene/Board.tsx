@@ -1,14 +1,14 @@
 import { useEffect, useMemo } from 'react';
 import { LatheGeometry, Vector2 } from 'three';
-import { BOARD, WORLD } from '../../engine/board/geometry';
+import { BOARD, STICK_RADIUS, WORLD } from '../../engine/board/geometry';
 import { useGameStore } from '../../store/useGameStore';
 import { createBoardTexture, createSisalBump } from './boardTexture';
 import { BoardWires } from './BoardWires';
 
 const R = BOARD.boardRadius / 1000;
 const DEPTH = 0.038;
-/** Outer radius of the surround (m). */
-const SURROUND_R = 0.4;
+/** Outer radius of the surround (m): darts stick anywhere on it (engine STICK_RADIUS). */
+const SURROUND_R = STICK_RADIUS;
 
 /**
  * Surround as a lathed, cushioned ring: it rises from just behind the board's
@@ -69,5 +69,4 @@ export function Board() {
   );
 }
 
-/** Radius (m) from bull within which a dart sticks on the board plane (board + surround). */
-export const STICK_RADIUS = SURROUND_R;
+export { STICK_RADIUS };

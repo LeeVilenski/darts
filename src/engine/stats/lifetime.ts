@@ -77,7 +77,7 @@ export function recordMatchInto(
         marks: prev.cricket.marks + pl.stats.marks,
         bestMpr: Math.max(prev.cricket.bestMpr, marksPerRound(pl)),
       };
-    } else {
+    } else if (match.mode === 'atc') {
       const pl = match.players[i]!;
       next.atc = {
         matches: prev.atc.matches + 1,

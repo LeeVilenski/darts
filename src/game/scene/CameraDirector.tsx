@@ -1,9 +1,13 @@
 import { useFrame, useThree } from '@react-three/fiber';
 import { useRef } from 'react';
 import { Vector3, type PerspectiveCamera } from 'three';
-import { chooseTargetFor } from '../../engine/ai/strategy';
 import { WORLD } from '../../engine/board/geometry';
-import { currentAi, useGameStore, type ThrownDart } from '../../store/useGameStore';
+import {
+  currentAi,
+  currentAiIntent,
+  useGameStore,
+  type ThrownDart,
+} from '../../store/useGameStore';
 import { isHolding } from '../input/holding';
 import { STICK_RADIUS } from './Board';
 import {
@@ -27,6 +31,21 @@ const LANE_POS = new Vector3(LANE_CAM.pos.x, LANE_CAM.pos.y, LANE_CAM.pos.z);
 const RATE = { aiming: 4.5, flight: 9, impact: 5, replay: 7, turnOver: 4 } as const;
 /** The board-cam operator pans more gently than the other shots (1/s). */
 const BOARD_PAN_RATE = 3.2;
+/** Menu hero shots: camera direction and distance from the look point, look offset from the bull, framing. */
+const MENU_SHOT = {
+  portrait: {
+    dir: new Vector3(0.34, 0.1, 1).normalize(),
+    dist: 1.25,
+    look: new Vector3(0, -0.16, 0),
+    half: 0.3,
+  },
+  landscape: {
+    dir: new Vector3(-0.38, 0.06, 1).normalize(),
+    dist: 1.25,
+    look: new Vector3(-0.4, 0.02, 0),
+    half: 0.36,
+  },
+};
 /** In replays, cut from the lane shot to the board cam this close to the board (m). */
 const REPLAY_BOARD_CAM_Z = 0.6;
 /** How quickly the aiming sway fades in/out (1/s). */
@@ -119,6 +138,19 @@ export function CameraDirector() {
       want.half = LANE_CAM.half;
     };
 
+    /**
+     * Menu backdrop: an angled hero shot of the board with darts in it, placed
+     * where the menu leaves room (above the tiles in portrait, right of the
+     * menu column in landscape).
+     */
+    const menuShot = () => {
+      const landscape = aspect >= 1.25;
+      const m = landscape ? MENU_SHOT.landscape : MENU_SHOT.portrait;
+      want.look.copy(BULL).add(m.look);
+      want.pos.copy(BULL).add(m.look).addScaledVector(m.dir, m.dist);
+      want.half = m.half;
+    };
+
     const phase = s.screen === 'menu' ? 'aiming' : s.phase;
     const last = s.darts[s.darts.length - 1];
     const ai = s.screen === 'game' ? currentAi(s) : null;
@@ -126,7 +158,9 @@ export function CameraDirector() {
     let kind: ShotKind = 'other';
     const replayDart = s.replay ? s.darts.find((d) => d.id === s.replay!.dartId) : undefined;
 
-    if (phase === 'replay' && replayDart) {
+    if (s.screen === 'menu') {
+      menuShot();
+    } else if (phase === 'replay' && replayDart) {
       const p0 = replayDart.launch.p0;
       const tip =
         dartTracker.id === -replayDart.id ? dartTracker.position : new Vector3(p0.x, p0.y, p0.z);
@@ -140,7 +174,9 @@ export function CameraDirector() {
       }
     } else if (aiCam && phase !== 'turnOver') {
       // Hold the board cam on the target bed for the whole AI turn, like TV coverage.
-      const target = boardMm(chooseTargetFor(s.match!).point);
+      // The AI's exact next target (personality, blockers); between legs fall back to the bull.
+      const intent = currentAiIntent(s);
+      const target = intent ? boardMm(intent.target.point) : BULL.clone();
       const land = last && phase !== 'aiming' ? landingPoint(last) : null;
       if (land && (phase === 'impact' || land.distanceTo(target) > BOARD_CAM.half * 0.6))
         boardCam(land);

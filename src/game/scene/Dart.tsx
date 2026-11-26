@@ -11,46 +11,49 @@ import {
   ShapeGeometry,
   Vector3,
 } from 'three';
-import { WORLD } from '../../engine/board/geometry';
+import { DART, WORLD } from '../../engine/board/geometry';
 import { GRAVITY, sampleFlight, type Vec3 } from '../../engine/physics/ballistics';
 import { useGameStore, type ThrownDart } from '../../store/useGameStore';
 import { STICK_RADIUS } from './Board';
 import { dartTracker, handTracker, kickCamera } from './dartTracker';
 
 // Shared geometry/materials. Dart tip at local origin, body along -Z.
-const TIP_LEN = 0.032;
-const BARREL_LEN = 0.045;
-const SHAFT_LEN = 0.035;
-const FLIGHT_LEN = 0.036;
+// Dimensions come from the engine so the collision model matches what you see.
+const TIP_LEN = DART.tipLength / 1000;
+const BARREL_LEN = DART.barrelLength / 1000;
+const SHAFT_LEN = DART.shaftLength / 1000;
+const FLIGHT_LEN = DART.flightLength / 1000;
+const FLIGHT_HALF = DART.flightHalfSpan / 1000;
+const FLIGHT_OVERLAP = DART.flightOverlap / 1000;
 /** Tip to the back of the flights (m). */
-export const DART_LENGTH = TIP_LEN + BARREL_LEN + SHAFT_LEN - 0.012 + FLIGHT_LEN;
+export const DART_LENGTH = TIP_LEN + BARREL_LEN + SHAFT_LEN - FLIGHT_OVERLAP + FLIGHT_LEN;
 
 const along = <T extends CylinderGeometry | ConeGeometry>(g: T, centerZ: number) => {
   g.rotateX(Math.PI / 2);
   g.translate(0, 0, centerZ);
   return g;
 };
-const tipGeo = along(new ConeGeometry(0.0012, TIP_LEN, 12), -TIP_LEN / 2);
+const tipGeo = along(new ConeGeometry(DART.tipRadius / 1000, TIP_LEN, 12), -TIP_LEN / 2);
 const barrelGeo = along(
-  new CylinderGeometry(0.0034, 0.0028, BARREL_LEN, 20),
+  new CylinderGeometry(DART.barrelRadius / 1000, (DART.barrelRadius - 0.6) / 1000, BARREL_LEN, 20),
   -TIP_LEN - BARREL_LEN / 2,
 );
 const shaftGeo = along(
-  new CylinderGeometry(0.0017, 0.0017, SHAFT_LEN, 12),
+  new CylinderGeometry(DART.shaftRadius / 1000, DART.shaftRadius / 1000, SHAFT_LEN, 12),
   -TIP_LEN - BARREL_LEN - SHAFT_LEN / 2,
 );
 const flightGeo = (() => {
   const s = new Shape();
   s.moveTo(0, 0);
-  s.lineTo(0.014, 0.012);
-  s.lineTo(0.014, FLIGHT_LEN);
+  s.lineTo(FLIGHT_HALF, 0.012);
+  s.lineTo(FLIGHT_HALF, FLIGHT_LEN);
   s.lineTo(0, FLIGHT_LEN - 0.004);
-  s.lineTo(-0.014, FLIGHT_LEN);
-  s.lineTo(-0.014, 0.012);
+  s.lineTo(-FLIGHT_HALF, FLIGHT_LEN);
+  s.lineTo(-FLIGHT_HALF, 0.012);
   s.closePath();
   const g = new ShapeGeometry(s);
   g.rotateX(Math.PI / 2); // shape +Y -> -Z (toward the tail)
-  g.translate(0, 0, -TIP_LEN - BARREL_LEN - SHAFT_LEN + 0.012);
+  g.translate(0, 0, -TIP_LEN - BARREL_LEN - SHAFT_LEN + FLIGHT_OVERLAP);
   return g;
 })();
 
@@ -76,7 +79,7 @@ const tmpDir = new Vector3();
 const tmpQ = new Quaternion();
 const axisX = new Vector3(1, 0, 0);
 const axisZ = new Vector3(0, 0, 1);
-const EMBED = 0.007;
+const EMBED = DART.embed / 1000;
 /** Post-impact flutter of a stuck dart (rad, 1/s, Hz). */
 const QUIVER = { amplitude: 0.06, damping: 7, frequency: 16 } as const;
 /** Time (s) over which a thrown dart blends from the hand pose onto its flight path. */

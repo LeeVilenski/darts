@@ -1,11 +1,11 @@
 import { isDouble, type DartScore } from './dart';
-import { nextTurn, type TurnStatus } from './types';
+import { awardLeg, nextTurn, type MatchFormat, type TurnStatus } from './types';
 
-export interface X01Options {
+export interface X01Options extends MatchFormat {
   startScore: 301 | 501 | 701;
   doubleIn: boolean;
   doubleOut: boolean;
-  /** First to this many legs wins the match. */
+  /** First to this many legs wins the match (or the set, when playing sets). */
   legsToWin: number;
 }
 
@@ -32,6 +32,7 @@ export interface X01Player {
   /** False until the player hits a double when double-in is on. */
   opened: boolean;
   legsWon: number;
+  setsWon: number;
   stats: PlayerStats;
 }
 
@@ -52,6 +53,9 @@ export interface X01State {
   current: number;
   /** Player who threw first in the current leg (rotates each leg). */
   legStarter: number;
+  setStarter?: number;
+  set?: number;
+  legWinner?: number | null;
   leg: number;
   turn: X01Turn;
   status: TurnStatus;
@@ -83,6 +87,7 @@ export function createX01(names: string[], options: X01Options = DEFAULT_X01): X
     remaining: options.startScore,
     opened: !options.doubleIn,
     legsWon: 0,
+    setsWon: 0,
     stats: emptyStats(),
   }));
   return {
@@ -149,15 +154,10 @@ export function applyDart(s: X01State, dart: DartScore): X01State {
   const turn = { ...s.turn, darts, points: turnPoints };
 
   if (remaining === 0) {
-    const legsWon = p.legsWon + 1;
-    const player = {
-      ...p,
-      remaining: 0,
-      opened: true,
-      legsWon,
-      stats: recordTurnStats(stats, turnPoints, true),
-    };
-    const matchWon = legsWon >= s.options.legsToWin;
+    const { player, matchWon } = awardLeg(
+      { ...p, remaining: 0, opened: true, stats: recordTurnStats(stats, turnPoints, true) },
+      s.options,
+    );
     return {
       ...s,
       players: withPlayer(s, i, player),

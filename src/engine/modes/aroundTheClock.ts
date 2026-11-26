@@ -1,10 +1,10 @@
 import type { DartScore } from './dart';
-import { baseOf, nextTurn, type TurnStatus } from './types';
+import { awardLeg, baseOf, nextTurn, type MatchFormat, type TurnStatus } from './types';
 
 /** Targets in order: 1–20, then the bull (outer or inner). */
 export const ATC_SEQUENCE = [...Array.from({ length: 20 }, (_, i) => i + 1), 25] as const;
 
-export interface AtcOptions {
+export interface AtcOptions extends MatchFormat {
   legsToWin: number;
   /** Doubles advance two numbers and trebles three. */
   multiplierAdvance: boolean;
@@ -16,6 +16,7 @@ export interface AtcPlayer {
   /** Index into ATC_SEQUENCE of the number this player needs next. */
   next: number;
   legsWon: number;
+  setsWon: number;
   stats: { darts: number; hits: number };
 }
 
@@ -25,6 +26,9 @@ export interface AtcState {
   players: AtcPlayer[];
   current: number;
   legStarter: number;
+  setStarter?: number;
+  set?: number;
+  legWinner?: number | null;
   leg: number;
   turn: { player: number; darts: DartScore[]; hits: number };
   status: TurnStatus;
@@ -42,7 +46,13 @@ export function createAtc(names: string[], options: AtcOptions = DEFAULT_ATC): A
   return {
     mode: 'atc',
     options,
-    players: names.map((name) => ({ name, next: 0, legsWon: 0, stats: { darts: 0, hits: 0 } })),
+    players: names.map((name) => ({
+      name,
+      next: 0,
+      legsWon: 0,
+      setsWon: 0,
+      stats: { darts: 0, hits: 0 },
+    })),
     current: 0,
     legStarter: 0,
     leg: 1,
@@ -72,11 +82,10 @@ export function applyAtcDart(s: AtcState, dart: DartScore): AtcState {
   const turn = { ...s.turn, darts, hits: s.turn.hits + (hit ? 1 : 0) };
 
   if (finished) {
-    const legsWon = player.legsWon + 1;
-    const matchWon = legsWon >= s.options.legsToWin;
+    const { player: winner, matchWon } = awardLeg(player, s.options);
     return {
       ...s,
-      players: s.players.map((p, j) => (j === i ? { ...player, legsWon } : p)),
+      players: s.players.map((p, j) => (j === i ? winner : p)),
       turn,
       status: matchWon ? 'matchWon' : 'legWon',
       winner: matchWon ? i : null,
