@@ -27,6 +27,21 @@ const SIDE_Y = 1.6;
 const BOARD_CAM_DIR = new Vector3(0.6, 0.2, 1).normalize();
 const BOARD_CAM_DIST = 0.55;
 const BOARD_CAM_HALF = 0.115;
+/** Menu hero shots: camera direction and distance from the look point, look offset from the bull, framing. */
+const MENU_SHOT = {
+  portrait: {
+    dir: new Vector3(0.34, 0.1, 1).normalize(),
+    dist: 1.25,
+    look: new Vector3(0, -0.16, 0),
+    half: 0.3,
+  },
+  landscape: {
+    dir: new Vector3(-0.38, 0.06, 1).normalize(),
+    dist: 1.25,
+    look: new Vector3(-0.4, 0.02, 0),
+    half: 0.36,
+  },
+};
 /** In replays, switch from the side tracking shot to the board cam this close to the board (m). */
 const REPLAY_BOARD_CAM_Z = 0.6;
 
@@ -99,12 +114,27 @@ export function CameraDirector() {
       want.half = BOARD_CAM_HALF;
     };
 
+    /**
+     * Menu backdrop: an angled hero shot of the board with darts in it, placed
+     * where the menu leaves room (above the tiles in portrait, right of the
+     * menu column in landscape).
+     */
+    const menuShot = () => {
+      const landscape = aspect >= 1.25;
+      const m = landscape ? MENU_SHOT.landscape : MENU_SHOT.portrait;
+      want.look.copy(BULL).add(m.look);
+      want.pos.copy(BULL).add(m.look).addScaledVector(m.dir, m.dist);
+      want.half = m.half;
+    };
+
     const phase = s.screen === 'menu' ? 'aiming' : s.phase;
     const last = s.darts[s.darts.length - 1];
     const aiTurn = !reduced && currentAi(s) !== null;
     let shotKind: 'side' | 'board' | 'other' = 'other';
     const replayDart = s.replay ? s.darts.find((d) => d.id === s.replay!.dartId) : undefined;
-    if (phase === 'replay' && replayDart) {
+    if (s.screen === 'menu') {
+      menuShot();
+    } else if (phase === 'replay' && replayDart) {
       const end = replayDart.flight.samples[replayDart.flight.samples.length - 1]!.p;
       const p0 = replayDart.launch.p0;
       const tip =
