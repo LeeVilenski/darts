@@ -24,6 +24,7 @@ import {
 import { appearanceFor } from '../../game/scene/appearance';
 import { useCareer } from '../../store/useCareer';
 import { Icon } from '../icons';
+import { AttributePanel, RatingsLine, TrainingCard } from './Attributes';
 
 type Tab = 'home' | 'calendar' | 'rankings' | 'profile';
 const TABS: { id: Tab; label: string }[] = [
@@ -200,6 +201,14 @@ function HomeTab({ c, onTab }: { c: CareerState; onTab(t: Tab): void }) {
                 {describePersonality(personalityFor(next.opponent.name))}
               </dd>
             </div>
+            {c.attributes && (
+              <div>
+                <dt>Your game</dt>
+                <dd>
+                  <RatingsLine a={c.attributes} />
+                </dd>
+              </div>
+            )}
             <div>
               <dt>Head to head</dt>
               <dd>{h2hLine(stats.h2h[next.opponent.id])}</dd>
@@ -218,6 +227,8 @@ function HomeTab({ c, onTab }: { c: CareerState; onTab(t: Tab): void }) {
           </button>
         </div>
       )}
+
+      {next && <TrainingCard c={c} />}
 
       <div className="hub-row">
         <div className="hub-card stat-card">
@@ -482,6 +493,9 @@ function ProfileTab({ c }: { c: CareerState }) {
         </div>
       </div>
 
+      <AttributePanel c={c} />
+
+      <h3>Career stats</h3>
       <div className="stat-grid">
         {tiles.map(([k, v]) => (
           <div key={k} className="stat-tile">

@@ -5,6 +5,7 @@ import { threeDartAverage } from '../engine/modes/x01';
 import { nextMatch } from '../engine/career/career';
 import { ROUND_NAMES } from '../engine/career/tiers';
 import { useCareer } from '../store/useCareer';
+import { GainStrip } from './career/Attributes';
 import { useGameStore } from '../store/useGameStore';
 
 type Row = [string, (i: number) => string | number];
@@ -115,10 +116,13 @@ export function MatchOver({ match }: { match: MatchState }) {
   const startGame = useGameStore((s) => s.startGame);
   const quit = useGameStore((s) => s.quitToMenu);
   const solo = match.players.length === 1;
-  const career = setup.kind !== 'practice' && !!setup.career;
+  const training = setup.kind !== 'practice' && !!setup.training;
+  const career = setup.kind !== 'practice' && (!!setup.career || training);
+  const gain = useCareer((s) => (career ? (s.career?.lastGain ?? null) : null));
   const openCareer = useCareer((s) => s.setOpen);
   const careerNote = useCareer((s) => {
     if (!career || !s.career) return null;
+    if (training) return 'Training session done.';
     const next = nextMatch(s.career);
     if (next)
       return `Next: ${ROUND_NAMES[next.round]!.toLowerCase()} against ${next.opponent.name}`;
@@ -159,6 +163,7 @@ export function MatchOver({ match }: { match: MatchState }) {
         </table>
         {career ? (
           <>
+            {gain && <GainStrip g={gain} />}
             {careerNote && <p className="career-last">{careerNote}</p>}
             <button
               type="button"

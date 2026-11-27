@@ -7,6 +7,23 @@ import { withStarter } from '../modes/types';
 import { applyDart, createX01, endTurn, type X01Options } from '../modes/x01';
 import { resolveDart, stuckDartOf } from '../physics/resolveDart';
 import { createRng, type Rng } from '../rng';
+import {
+  applyXp,
+  ATTRS,
+  attributesForTier,
+  matchXp,
+  newAttributes,
+  onTarget,
+  recheck,
+  xpFromDarts,
+  xpFromVisits,
+  type Attr,
+  type AttributeChange,
+  type DartRecord,
+  type PlayerAttributes,
+  type Ratings,
+} from './attributes';
+import { AI_LEVELS } from '../ai/skill';
 import { addMatch, emptyCareerStats, type CareerStats, type MatchSummary } from './stats';
 import { EVENTS_PER_SEASON, PRIZE_SHARE, PROMOTION_PLACES, TIERS, type Reached } from './tiers';
 
@@ -77,6 +94,20 @@ export interface CareerState {
   lastSeason: SeasonSummary | null;
   /** Your record across career matches (missing in saves from before it was added). */
   stats?: CareerStats;
+  /** Your throwing attributes (filled in on load for older saves). */
+  attributes?: PlayerAttributes;
+  /** XP from your last match or training session, for the post-match screen. */
+  lastGain?: GainReport | null;
+  /** Event you've already trained before (one session per event). */
+  trainedFor?: string | null;
+}
+
+export interface GainReport {
+  source: 'match' | 'training';
+  player: number;
+  attrs: Ratings;
+  raised: AttributeChange['raised'];
+  levelsGained: number;
 }
 
 // Fictional names only.
@@ -218,6 +249,9 @@ export function newCareer(you: string, seed: number): CareerState {
     earnings: 0,
     lastSeason: null,
     stats: emptyCareerStats(),
+    attributes: newAttributes(),
+    lastGain: null,
+    trainedFor: null,
   };
   return { ...base, event: drawEvent(base) };
 }
@@ -363,12 +397,14 @@ function endSeason(c: CareerState): CareerState {
           { season: c.season, tier: c.tier, name: `${TIERS[c.tier]!.name} Order of Merit` },
         ]
       : c.trophies;
+  const tier = promoted ? c.tier + 1 : c.tier;
   return {
     ...c,
+    attributes: c.attributes && promoted ? recheck(c.attributes, tier).attrs : c.attributes,
     trophies,
     lastSeason: { season: c.season, tier: c.tier, position, promoted },
     season: c.season + 1,
-    tier: promoted ? c.tier + 1 : c.tier,
+    tier,
     eventIndex: 0,
     merit: {},
   };
@@ -382,11 +418,26 @@ export function recordResult(
   c: CareerState,
   won: boolean,
   score: [number, number],
-  summary?: Omit<MatchSummary, 'opponent' | 'won' | 'score'>,
+  summary?: Omit<MatchSummary, 'opponent' | 'won' | 'score'> & {
+    darts?: readonly DartRecord[];
+    /** You won a deciding leg. */
+    decider?: boolean;
+  },
 ): CareerState {
   const next = nextMatch(c);
   if (!next) return c;
   const r = next.round;
+  if (summary?.darts) {
+    const attrs = xpFromDarts(summary.darts);
+    attrs.scoring += xpFromVisits(
+      summary.stats.tons + summary.stats.ton40s,
+      summary.stats.oneEighties,
+    );
+    if (summary.stats.bestCheckout >= 100) attrs.finishing += 15;
+    if (won && summary.decider) attrs.nerve += 20;
+    const upset = AI_LEVELS.indexOf(next.opponent.level) > c.tier;
+    c = gainXp(c, 'match', { attrs, player: matchXp(won, score[0], upset, c.tier) });
+  }
   if (summary)
     c = {
       ...c,
@@ -404,6 +455,59 @@ export function recordResult(
   });
   const c2 = { ...c, event: { ...c.event, rounds: [...c.event.rounds.slice(0, r), round] } };
   return advance(simulateRound(c2));
+}
+
+/** Bank XP into your attributes and remember it for the post-match screen. */
+function gainXp(
+  c: CareerState,
+  source: GainReport['source'],
+  gain: { attrs: Ratings; player: number },
+): CareerState {
+  const before = c.attributes ?? attributesForTier(c.tier);
+  const change = applyXp(before, gain, c.tier);
+  return {
+    ...c,
+    attributes: change.attrs,
+    lastGain: {
+      source,
+      player: Math.round(gain.player),
+      attrs: Object.fromEntries(ATTRS.map((a) => [a, Math.round(gain.attrs[a])])) as Ratings,
+      raised: change.raised,
+      levelsGained: change.levelsGained,
+    },
+  };
+}
+
+/** Training drills between events: each works one attribute hardest. */
+export const DRILLS: Record<Attr, { mode: 'atc' | 'bobs27' | 'ladder' | 'halveit'; name: string }> =
+  {
+    scoring: { mode: 'atc', name: 'Around the Clock' },
+    finishing: { mode: 'bobs27', name: "Bob's 27" },
+    nerve: { mode: 'ladder', name: '121 checkout ladder' },
+    rhythm: { mode: 'halveit', name: 'Halve-It' },
+  };
+
+/** Key of the event you're about to play, for the one-session-per-event training rule. */
+export const eventKey = (c: CareerState) => `${c.season}:${c.tier}:${c.eventIndex}`;
+export const canTrain = (c: CareerState) => c.trainedFor !== eventKey(c) && !!nextMatch(c);
+
+/** Record a finished training session. `bonus` is drill-specific (e.g. 121 checkouts). */
+export function recordTraining(
+  c: CareerState,
+  focus: Attr,
+  darts: readonly DartRecord[],
+  bonus = 0,
+): CareerState {
+  if (!canTrain(c)) return c;
+  const raw = xpFromDarts(darts);
+  const hits = darts.filter(onTarget).length;
+  // The drill's attribute gets the full value; the others half.
+  const attrs = Object.fromEntries(ATTRS.map((a) => [a, raw[a] * 0.5])) as Ratings;
+  attrs[focus] = raw[focus] * 0.8 + hits + bonus;
+  return {
+    ...gainXp(c, 'training', { attrs, player: 10 + Math.round(darts.length / 6) }),
+    trainedFor: eventKey(c),
+  };
 }
 
 export type ScheduleStatus = 'done' | 'current' | 'upcoming';

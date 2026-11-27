@@ -1,7 +1,7 @@
 import { pressureFor } from '../../engine/ai/pressure';
 import type { MatchState } from '../../engine/modes/match';
 import { swayAmplitude, swayOffset } from '../../engine/physics/sway';
-import { currentAi, setAimSway, useGameStore } from '../../store/useGameStore';
+import { careerSwayScale, currentAi, setAimSway, useGameStore } from '../../store/useGameStore';
 import { pointerHold, steadyAim } from './holding';
 
 /**
@@ -28,7 +28,8 @@ export function currentSway(now = performance.now()): { x: number; y: number } {
   const pressure = currentPressure();
   if (pressure <= 0) return { x: 0, y: 0 };
   const steadyFor = pointerHold.down ? steadyAim.steadyFor(now) / 1000 : 0;
-  const amp = swayAmplitude(pressure, s.assist, steadyFor, (now - aimingSince) / 1000);
+  const amp =
+    swayAmplitude(pressure, s.assist, steadyFor, (now - aimingSince) / 1000) * careerSwayScale(s);
   const m = s.match!;
   const seed = m.leg * 101 + m.current * 13 + s.darts.length + (m.set ?? 0) * 977;
   return swayOffset(now / 1000, amp, seed);

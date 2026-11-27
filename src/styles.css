@@ -1593,3 +1593,138 @@ input {
   font-weight: 700;
   font-size: 30px;
 }
+
+/* ---------- career attributes ---------- */
+.attrs {
+  gap: 12px;
+}
+.attrs-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+.attrs-head > div {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.progress.thin {
+  height: 5px;
+}
+.attr {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.attr-top {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.attr-top b {
+  flex: 1;
+}
+.attr-val {
+  font-family: var(--display);
+  font-size: 22px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: var(--c-accent, var(--accent));
+}
+.attr .plus {
+  appearance: none;
+  border: 0;
+  width: 30px;
+  height: 30px;
+  border-radius: 8px;
+  background: var(--gold);
+  color: #1b1400;
+  font-size: 18px;
+  font-weight: 900;
+  cursor: pointer;
+}
+.attr .plus:disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
+}
+.attr-bar {
+  position: relative;
+  height: 10px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.08);
+  overflow: hidden;
+}
+.attr-bar span {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+}
+.attr-bar .fill {
+  left: 0;
+  background: var(--c-accent, var(--accent));
+  border-radius: 999px;
+}
+.attr-bar .next {
+  background: rgba(255, 255, 255, 0.45);
+}
+.attr-bar .cap {
+  width: 2px;
+  margin-left: -1px;
+  background: #fff;
+  opacity: 0.7;
+}
+.ratings-line {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 10px;
+  font-size: 12px;
+  color: var(--muted);
+}
+.ratings-line b {
+  color: var(--fg);
+}
+.drill-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 6px;
+}
+.drill {
+  appearance: none;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: rgba(0, 0, 0, 0.25);
+  color: inherit;
+  font: inherit;
+  padding: 8px 10px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  cursor: pointer;
+  text-align: left;
+}
+.drill:hover:not(:disabled) {
+  border-color: var(--c-accent);
+}
+.drill:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+.gain-strip {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.06);
+  font-size: 13px;
+}
+.gain-strip .raised {
+  color: var(--good);
+  font-weight: 700;
+}
+.gain-strip .raised.gold {
+  color: var(--gold);
+}
