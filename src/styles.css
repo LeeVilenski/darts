@@ -1824,3 +1824,66 @@ input {
   line-height: 1;
   margin-bottom: 2px;
 }
+
+/* ---------- career inbox ---------- */
+.hub-tabs {
+  grid-template-columns: repeat(5, 1fr);
+}
+.hub-tabs button {
+  position: relative;
+  font-size: 13px;
+}
+.hub-tabs .badge {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 4px;
+  border-radius: 999px;
+  background: var(--bad);
+  color: #fff;
+  font-size: 10px;
+  line-height: 16px;
+}
+.inbox {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.message header {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  align-items: baseline;
+}
+.message.unread {
+  border-color: var(--c-edge);
+  cursor: pointer;
+}
+.message.read {
+  opacity: 0.85;
+}
+.msg-subject {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 15px;
+}
+.msg-subject .dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--c-accent);
+  flex-shrink: 0;
+}
+.msg-actions {
+  display: flex;
+  gap: 8px;
+}
+.message .chip {
+  align-self: flex-start;
+}
+.message header > .muted {
+  white-space: nowrap;
+}

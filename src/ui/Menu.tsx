@@ -2,6 +2,7 @@ import { useEffect, useState, type ReactNode } from 'react';
 import { AI_SKILL } from '../engine/ai/skill';
 import { WEEKS_PER_SEASON } from '../engine/career/circuits';
 import { STAGE_NAMES } from './career/CareerHub';
+import { unread } from '../engine/career/milestones';
 import { ASSIST } from '../engine/physics/throwModel';
 import { lifetimeAverage } from '../engine/stats/lifetime';
 import { useLifetimeStats } from '../store/lifetimeStats';
@@ -355,5 +356,6 @@ export function describeSetup(setup: GameSetup): string {
 
 function careerSubtitle(c: ReturnType<typeof useCareer.getState>['career']): string {
   if (!c) return 'Pub to Pro Tour';
-  return `${STAGE_NAMES[c.tier]} · week ${c.week}/${WEEKS_PER_SEASON}`;
+  const n = unread(c);
+  return `${STAGE_NAMES[c.tier]} · week ${c.week}/${WEEKS_PER_SEASON}${n ? ` · ${n} new` : ''}`;
 }

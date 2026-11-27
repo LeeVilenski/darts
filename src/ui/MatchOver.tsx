@@ -5,6 +5,7 @@ import { threeDartAverage } from '../engine/modes/x01';
 import { describeReached, nextMatch } from '../engine/career/career';
 import { useCareer } from '../store/useCareer';
 import { GainStrip } from './career/Attributes';
+import { unread } from '../engine/career/milestones';
 import { useGameStore } from '../store/useGameStore';
 
 type Row = [string, (i: number) => string | number];
@@ -119,6 +120,7 @@ export function MatchOver({ match }: { match: MatchState }) {
   const career = setup.kind !== 'practice' && (!!setup.career || training);
   const gain = useCareer((s) => (career ? (s.career?.lastGain ?? null) : null));
   const openCareer = useCareer((s) => s.setOpen);
+  const newMail = useCareer((s) => (career && s.career ? unread(s.career) : 0));
   const careerNote = useCareer((s) => {
     if (!career || !s.career) return null;
     if (training) return 'Training session done.';
@@ -165,6 +167,11 @@ export function MatchOver({ match }: { match: MatchState }) {
           <>
             {gain && <GainStrip g={gain} />}
             {careerNote && <p className="career-last">{careerNote}</p>}
+            {newMail > 0 && (
+              <p className="career-last gold" data-testid="new-mail">
+                📬 {newMail} new message{newMail === 1 ? '' : 's'} in your career inbox
+              </p>
+            )}
             <button
               type="button"
               className="primary-btn"

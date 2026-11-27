@@ -72,6 +72,8 @@ export function migrateV1(old: CareerV1): CareerState {
     results,
     trophies,
     earnings: old.earnings,
+    // Known on the circuit you were on.
+    reputation: [0, 250, 500, 900][tier]!,
     attributes: old.attributes ?? attributesForTier(tier),
     stats: {
       ...stats,
@@ -85,7 +87,16 @@ export function migrateV1(old: CareerV1): CareerState {
 /** Load any saved career version. */
 export function loadCareer(raw: unknown): CareerState | null {
   const c = raw as { version?: number } | null;
-  if (c?.version === 2) return c as CareerState;
+  if (c?.version === 2) {
+    const v2 = c as CareerState;
+    // Fields added after version 2 first shipped.
+    return {
+      ...v2,
+      reputation: v2.reputation ?? 0,
+      inbox: v2.inbox ?? [],
+      milestones: v2.milestones ?? [],
+    };
+  }
   if (c?.version === 1) return migrateV1(c as CareerV1);
   return null;
 }

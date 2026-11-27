@@ -37,12 +37,15 @@ import { useCareer } from '../../store/useCareer';
 import { Icon } from '../icons';
 import { Segmented } from '../Segmented';
 import { AttributePanel, RatingsLine, TrainingCard } from './Attributes';
+import { InboxTab, MessageCard, Reputation } from './Inbox';
+import { unread } from '../../engine/career/milestones';
 
-type Tab = 'home' | 'calendar' | 'rankings' | 'profile';
+type Tab = 'home' | 'calendar' | 'rankings' | 'inbox' | 'profile';
 const TABS: { id: Tab; label: string }[] = [
   { id: 'home', label: 'Home' },
   { id: 'calendar', label: 'Calendar' },
   { id: 'rankings', label: 'Rankings' },
+  { id: 'inbox', label: 'Inbox' },
   { id: 'profile', label: 'Profile' },
 ];
 
@@ -93,6 +96,11 @@ export function CareerHub() {
                 data-testid={`career-tab-${t.id}`}
               >
                 {t.label}
+                {t.id === 'inbox' && unread(career) > 0 && (
+                  <span className="badge" data-testid="unread">
+                    {unread(career)}
+                  </span>
+                )}
               </button>
             ))}
           </nav>
@@ -100,6 +108,7 @@ export function CareerHub() {
             {tab === 'home' && <HomeTab c={career} onTab={setTab} />}
             {tab === 'calendar' && <CalendarTab c={career} />}
             {tab === 'rankings' && <RankingsTab c={career} />}
+            {tab === 'inbox' && <InboxTab c={career} />}
             {tab === 'profile' && <ProfileTab c={career} />}
           </div>
         </>
@@ -177,6 +186,19 @@ function HomeTab({ c, onTab }: { c: CareerState; onTab(t: Tab): void }) {
             Start season {c.season}
           </button>
         </div>
+      )}
+
+      {c.inbox
+        .filter((m) => !m.read)
+        .slice(-2)
+        .reverse()
+        .map((m) => (
+          <MessageCard key={m.id} c={c} m={m} />
+        ))}
+      {unread(c) > 2 && (
+        <button type="button" className="ghost-btn small" onClick={() => onTab('inbox')}>
+          {unread(c) - 2} more in your inbox
+        </button>
       )}
 
       {next ? <Fixture c={c} /> : <ThisWeek c={c} />}
@@ -618,6 +640,7 @@ function ProfileTab({ c }: { c: CareerState }) {
         </div>
       </div>
 
+      <Reputation c={c} />
       <AttributePanel c={c} />
 
       <h3>Career stats</h3>

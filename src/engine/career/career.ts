@@ -38,6 +38,7 @@ import {
   type EventTemplate,
 } from './circuits';
 import { quickMatch } from './quickSim';
+import { eventRep, matchRep, type Message } from './story';
 import { addMatch, emptyCareerStats, type CareerStats, type MatchSummary } from './stats';
 
 export type { BracketMatch } from './bracket';
@@ -147,6 +148,11 @@ export interface CareerState {
   lastGain: GainReport | null;
   /** Week you've already trained in (one session per week). */
   trainedFor: string | null;
+  /** How well known you are: opens wildcards and invitations. */
+  reputation: number;
+  inbox: Message[];
+  /** Story milestones that have fired (see milestones.ts). */
+  milestones: string[];
 }
 
 // Fictional names only.
@@ -312,6 +318,9 @@ export function newCareer(you: string, seed: number): CareerState {
     attributes: newAttributes(),
     lastGain: null,
     trainedFor: null,
+    reputation: 0,
+    inbox: [],
+    milestones: [],
   };
 }
 
@@ -639,6 +648,9 @@ function settleEvent(c: CareerState, e: CalEvent, rounds: BracketMatch[][]): Car
             ]
           : next.trophies,
       earnings: next.earnings + prize,
+      reputation:
+        next.reputation +
+        eventRep(nRounds - mine, CIRCUIT_INFO[e.circuit].stage, e.kind === 'major'),
     };
     // A qualifier's finalists go through to the major.
     if (e.kind === 'qualifier' && e.feeds && mine >= nRounds - 1)
@@ -731,6 +743,22 @@ export function recordResult(
     if (won && summary.decider) attrs.nerve += 20;
     const upset = AI_LEVELS.indexOf(next.opponent.level) > c.tier;
     c = gainXp(c, 'match', { attrs, player: matchXp(won, score[0], upset, c.tier) });
+  }
+  if (summary) {
+    const s = summary.stats;
+    c = {
+      ...c,
+      reputation:
+        c.reputation +
+        matchRep({
+          won,
+          stage: c.tier,
+          upset: AI_LEVELS.indexOf(next.opponent.level) > c.tier,
+          average: s.darts ? (s.points / s.darts) * 3 : 0,
+          oneEighties: s.oneEighties,
+          bestCheckout: s.bestCheckout,
+        }),
+    };
   }
   if (summary)
     c = {

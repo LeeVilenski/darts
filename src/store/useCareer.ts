@@ -19,6 +19,7 @@ import {
   type CareerState,
 } from '../engine/career/career';
 import { loadCareer } from '../engine/career/migrate';
+import { answerOffer, markRead, withStory } from '../engine/career/milestones';
 import { MODE_DEFAULTS } from '../engine/modes/match';
 import { ASSIST } from '../engine/physics/throwModel';
 import { setCareerThrow, useGameStore, type MatchSetup } from './useGameStore';
@@ -56,6 +57,9 @@ interface CareerStore {
   enter(id: string): void;
   /** Play this week without you. */
   skipWeek(): void;
+  /** Accept or decline an offer in a message. */
+  answer(messageId: string, accept: boolean): void;
+  read(messageId: string): void;
   /** Start your next match. */
   play(): void;
   /** Start a training session for an attribute. */
@@ -64,6 +68,12 @@ interface CareerStore {
   dismissSeason(): void;
   retire(): void;
 }
+
+/** Apply an action and let the story react (wildcards, cards, messages). */
+const act = (f: (c: CareerState) => CareerState) => {
+  const c = useCareer.getState().career;
+  if (c) update(withStory(c, f));
+};
 
 const update = (career: CareerState | null) => {
   save(career);
@@ -80,12 +90,16 @@ export const useCareer = create<CareerStore>((set, get) => ({
     update(newCareer(name, (Date.now() ^ (Math.random() * 0x7fffffff)) >>> 0));
   },
   enter(id) {
-    const c = get().career;
-    if (c) update(enterEvent(c, id));
+    act((c) => enterEvent(c, id));
   },
   skipWeek() {
-    const c = get().career;
-    if (c) update(skipWeek(c));
+    act(skipWeek);
+  },
+  answer(id, accept) {
+    act((c) => answerOffer(c, id, accept));
+  },
+  read(id) {
+    act((c) => markRead(c, id));
   },
   play() {
     const c = get().career;
@@ -160,10 +174,12 @@ useGameStore.subscribe((s, prev) => {
   const c = useCareer.getState().career;
   if (!c) return;
 
-  if (s.setup.training) {
+  const focus = s.setup.training;
+  if (focus) {
     // 121: every checkout is a pressure finish.
     const bonus = m.mode === 'ladder' ? m.players[0]!.checkouts * 15 : 0;
-    update(recordTraining(c, s.setup.training, session, bonus));
+    const darts = session;
+    act((c) => recordTraining(c, focus, darts, bonus));
     session = [];
     return;
   }
@@ -172,12 +188,13 @@ useGameStore.subscribe((s, prev) => {
     m.options.setsToWin ? m.players[i]!.setsWon : m.players[i]!.legsWon;
   const score: [number, number] = [tally(0), tally(1)];
   const lastLeg = m.options.setsToWin ? 0 : m.options.legsToWin - 1;
-  update(
+  const darts = session;
+  act((c) =>
     recordResult(c, m.winner === 0, score, {
       // With sets, legs restart every set, so only count them in legs-only matches.
       legs: m.options.setsToWin ? [0, 0] : score,
       stats: m.players[0]!.stats,
-      darts: session,
+      darts,
       decider: lastLeg > 0 && score[0] === lastLeg + 1 && score[1] === lastLeg,
     }),
   );

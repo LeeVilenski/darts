@@ -1,6 +1,6 @@
 # Career mode v2: plan
 
-Status: agreed. Phases 1 (career hub), 2 (player attributes) and 3 (calendar and circuits) are built.
+Status: agreed. Phases 1–4 are built (hub, attributes, calendar and circuits, reputation and inbox).
 
 ## Where we are
 
