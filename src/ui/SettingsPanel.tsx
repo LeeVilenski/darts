@@ -14,6 +14,7 @@ export function SettingsPanel() {
   const quality = useGameStore((s) => s.quality);
   const throwControl = useGameStore((s) => s.throwControl);
   const palette = useGameStore((s) => s.palette);
+  const nerves = useGameStore((s) => s.nerves);
   const onOff = [
     { value: true, label: 'On' },
     { value: false, label: 'Off' },
@@ -85,6 +86,12 @@ export function SettingsPanel() {
           { value: 'low', label: 'Battery saver' },
         ]}
         onChange={(v) => update({ quality: v })}
+      />
+      <Segmented<boolean>
+        label="Pressure sway"
+        value={nerves}
+        options={onOff}
+        onChange={(v) => update({ nerves: v })}
       />
       <Segmented<boolean>
         label="Sound"

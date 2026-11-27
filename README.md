@@ -32,6 +32,10 @@ See [`docs/PLAN.md`](docs/PLAN.md) for the full implementation plan and mileston
   of a turn and on finishing darts. AI turns get a TV board cam held on the target, and 180s, checkouts,
   bounce-outs and Robin Hoods get a slow-motion replay from behind the thrower (tap to skip).
   **Reduced motion** in Settings turns the follow, sway and shake off.
+- **Pressure sway:** on big darts (leg and match darts, missed doubles, an opponent waiting on a finish)
+  your aim marker warms in colour and starts to drift, your view breathes harder and you hear your
+  heartbeat. The dart goes where the marker is when you let go, so time your release; holding a
+  steady aim settles it a little. Settings → Pressure sway turns it off.
 - A first-run tutorial walks through aiming and throwing; replay it from the menu.
 - **Stats** keeps lifetime records per player; optional accounts sync them (docs/ACCOUNTS.md).
 - Installable as an app and playable offline after the first visit.

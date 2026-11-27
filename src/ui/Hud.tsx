@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useAimHint } from '../game/input/holding';
+import { currentPressure } from '../game/input/nerves';
 import type { HitResult } from '../engine/board/resolveHit';
 import { AI_SKILL } from '../engine/ai/skill';
 import { CRICKET_TARGETS, type CricketState } from '../engine/modes/cricket';
@@ -260,6 +261,8 @@ function ScorePop() {
 
 function Prompt() {
   const aimHint = useAimHint((s) => s.visible);
+  // Selected from the store so the prompt updates as the match does.
+  const pressure = useGameStore(() => currentPressure());
   const phase = useGameStore((s) => s.phase);
   const match = useGameStore((s) => s.match);
   const darts = useGameStore((s) => s.darts);
@@ -285,6 +288,10 @@ function Prompt() {
     text = aiPressure >= 0.6 ? `${name} needs this one…` : `${name} is throwing…`;
   } else if (phase === 'aiming' && aimHint && !meter) {
     text = 'Aim moved · hold still a moment, then flick';
+  } else if (phase === 'aiming' && pressure >= 0.7) {
+    text = `${multi ? `${name}: ` : ''}Match dart · hold steady, then let it go`;
+  } else if (phase === 'aiming' && pressure >= 0.4) {
+    text = `${multi ? `${name}: ` : ''}For the leg · steady…`;
   } else if (phase === 'aiming') {
     const how = meter ? 'drag to aim, hold Throw' : 'drag to aim, flick up';
     text = multi ? `${name} to throw · ${how}` : how[0]!.toUpperCase() + how.slice(1);

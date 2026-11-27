@@ -8,7 +8,8 @@ import { backNameFor } from './appearance';
  *
  * x01: each player has a column; their start score at the top, then their
  * remaining score chalked underneath after each turn, older scores struck
- * through. Cricket: the marks grid (/, X, circled X) and points. Other games:
+ * through. Cricket: the marks grid (/, X, circled X) and points. Killer: each
+ * player's number, their lives as strokes crossed off, K once they're a killer. Other games:
  * each player's score. Legs won are tally marks under the names.
  */
 
@@ -82,6 +83,18 @@ export type ChalkSheet =
       current: number;
     }
   | {
+      kind: 'killer';
+      title: string;
+      names: string[];
+      legs: number[];
+      /** Each player's own number. */
+      numbers: number[];
+      lives: number[];
+      startLives: number;
+      killer: boolean[];
+      current: number;
+    }
+  | {
       kind: 'scores';
       title: string;
       names: string[];
@@ -128,6 +141,19 @@ export function chalkSheet(m: MatchState | null, log: ChalkLog | null): ChalkShe
       targets: CRICKET_TARGETS.map((t) => (t === 25 ? 'B' : String(t))),
       marks: m.players.map((p) => CRICKET_TARGETS.map((t) => p.marks[t])),
       points: m.players.map((p) => p.points),
+      current,
+    };
+  }
+  if (m.mode === 'killer') {
+    return {
+      kind: 'killer',
+      title: 'KILLER',
+      names,
+      legs,
+      numbers: m.players.map((p) => p.number),
+      lives: m.players.map((p) => p.lives),
+      startLives: m.options.lives,
+      killer: m.players.map((p) => p.killer),
       current,
     };
   }

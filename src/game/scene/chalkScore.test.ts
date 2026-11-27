@@ -124,3 +124,20 @@ describe('no match', () => {
     expect(chalkSheet(null, null).kind).toBe('idle');
   });
 });
+
+describe('killer chalkboard', () => {
+  it('shows numbers, lives and who is a killer', async () => {
+    const { DEFAULT_KILLER } = await import('../../engine/modes/killer');
+    const m = createMatch(['A Player', 'B Player', 'C Player'], {
+      mode: 'killer',
+      options: DEFAULT_KILLER,
+    });
+    const sheet = chalkSheet(m, null);
+    if (sheet.kind !== 'killer') throw new Error('killer expected');
+    if (m.mode !== 'killer') throw new Error('killer match expected');
+    expect(sheet.numbers).toEqual(m.players.map((p) => p.number));
+    expect(sheet.lives).toEqual([3, 3, 3]);
+    expect(sheet.startLives).toBe(3);
+    expect(sheet.killer).toEqual([false, false, false]);
+  });
+});
