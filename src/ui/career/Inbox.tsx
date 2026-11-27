@@ -32,8 +32,16 @@ export function MessageCard({ c, m, compact }: { c: CareerState; m: Message; com
       data-testid="message"
     >
       <header>
+        <span className={`msg-avatar ${m.from}`} aria-hidden="true">
+          {who.name
+            .split(' ')
+            .map((w) => w[0])
+            .join('')
+            .slice(0, 2)}
+        </span>
         <span className="msg-from">
-          <b>{who.name}</b> <span className="muted small">· {who.role}</span>
+          <b>{who.name}</b>
+          <span className="muted small">{who.role}</span>
         </span>
         <span className="muted small">
           S{m.season} W{m.week}
