@@ -1,6 +1,6 @@
 # Career mode v2: plan
 
-Status: proposal. Nothing here is built yet.
+Status: agreed. Phase 1 is in progress.
 
 ## Where we are
 
@@ -23,9 +23,11 @@ The problems are mostly at the surface:
 2. **A story with firm progression.** You start at your local pub, impress people, get messages
    offering wildcards into county events, earn a tour card at Q-School, and keep it by staying in
    the rankings. Every gate has a stated requirement and a progress bar. Nothing is random luck.
-3. **An RPG feel without touching your aim.** Your skill is your own throwing. Progression comes
-   from **access** (which events you can enter), **reputation**, **ranking** and **unlocks**. It
-   never comes from stat boosts to the throw model. Assist settings stay a separate, honest choice.
+3. **A real RPG: you get better.** You start as a rough pub thrower. Your darts scatter more,
+   wild darts happen, doubles drift and the aim shakes under pressure. Playing and training raise
+   four **attributes** (Scoring, Finishing, Nerve, Rhythm) until, at the top, you throw as cleanly
+   as the normal game, or a touch better under pressure. See [Player attributes](#player-attributes).
+   Progression also comes from **access**, **reputation**, **ranking** and **unlocks**.
 
 ## The path (player's view)
 
@@ -130,7 +132,46 @@ Example season 1, as a player would see it:
   lights, folding tables), a floor event (rows of boards), and a TV stage (walk-on, crowd, lights)
   for majors.
 - **Money.** Entry fees for opens and Q-School make earnings matter. Earnings can also unlock
-  cosmetics: barrels, flights, shirt designs, walk-on music. Cosmetic only (see Goals).
+  cosmetics: barrels, flights, shirt designs, walk-on music. Money only buys cosmetics, never attribute points.
+
+### 8. Player attributes
+
+Your career player has four attributes, each rated 1–99. They only affect **career** matches and
+career training. Quick play and practice are unchanged. The attributes scale the existing throw
+model: `computeLaunch` gets a career-adjusted `AssistTuning`, and the pressure sway gets a
+multiplier. So everything still comes from your own aim and flick. A low rating just makes the
+consequences of a slightly-off dart bigger, and adds the odd shocker.
+
+| Attribute     | What a low rating does (the pub you)                                                | Mechanic                                                           | Trained by                                  |
+| ------------- | ----------------------------------------------------------------------------------- | ------------------------------------------------------------------ | ------------------------------------------- |
+| **Scoring**   | Darts spray around the treble, and now and then one goes wild (well out of the bed) | Base scatter ×2.0 → ×1.0, wild-dart chance 10% → 0% (2.5× scatter) | Trebles hit, 100+ visits, 180s              |
+| **Finishing** | Doubles and the bull drift off the wire                                             | Extra scatter on darts aimed at a double or bull, ×1.6 → ×1.0      | Doubles attempted and hit, checkouts        |
+| **Nerve**     | The aim swings hard on a match dart, and a pressure dart scatters more              | Sway ×1.8 → ×0.7, pressure scatter +60% → 0                        | Darts hit under pressure, deciding legs won |
+| **Rhythm**    | A slightly snatched or mistimed flick is punished hard                              | Unsteadiness scatter ×2.0 → ×0.8, power dead zone ×0.5 → ×1.2      | Clean releases, steady turns                |
+
+The numbers are starting points. A calibration test (like `ai/calibration.test.ts`) simulates
+perfect-technique legs at ratings 1 and 99. The target is that a rating-1 player with perfect
+technique averages about pub/club level, and a rating-99 player with perfect technique plays
+exactly like the normal game.
+
+**How you improve (XP).** It's a mix of use-based and chosen:
+
+- **Use-based XP.** Each attribute gains XP from the matching actions in career matches (see the
+  table). Ratings rise as XP crosses thresholds, and each point costs more than the last.
+- **Level-ups.** Match XP (more for wins, upsets and titles) raises your **player level**. Each
+  level gives a **skill point** to spend on any attribute, so you choose your build. Fix your
+  doubles, or become a heavy scorer.
+- **Training.** Between events you can do **one training session**, a drill using the existing
+  modes: Around the Clock → Scoring, Bob's 27 → Finishing, a 121 checkout ladder → Finishing and
+  Nerve, a pressure drill → Nerve. You earn XP scaled by how well you did. With the calendar,
+  training uses a week instead of an event.
+- **Stage caps.** Your ceiling rises as you climb: 40 at the Pub, 60 at County, 80 on the Challenge
+  Tour, 99 on the Pro Tour. A promotion message says so: _"Northfield's county coach has offered to
+  work with you. Your ceiling has risen to 60."_ You can't max out at the Red Lion, and moving up
+  always means you can get better.
+- The HUD shows nothing new. The **pre-match card** shows your ratings next to the opponent's
+  level, and the **post-match strip** shows the XP gained and any rating that went up
+  ("Finishing 23 → 24").
 
 ## UI plan
 
@@ -145,7 +186,7 @@ tabs:
    opens its details and bracket.
 3. **Rankings:** circuit table and tour ranking, highlighting you, the promotion or cut lines,
    and movement arrows.
-4. **Profile:** stats, trophies, timeline. Retire lives here, behind a confirm.
+4. **Profile:** attributes with XP bars and skill points to spend, stats, trophies, timeline. Retire lives here, behind a confirm.
 5. **Inbox:** the message list with action buttons.
 
 Other screens:
@@ -174,6 +215,7 @@ engine/career/
   milestones.ts   rules → effects + messages
   messages.ts     templates, cast of senders
   stats.ts        career stats + h2h
+  attributes.ts   ratings, XP, levels, caps, and the career-adjusted throw tuning
   migrate.ts      v1 → v2 save migration
 store/useCareer.ts  v2 state, actions: enterEvent, skipWeek, acceptInvite, readMessage…
 ui/career/        Hub.tsx, HomeTab, CalendarTab, RankingsTab, ProfileTab, InboxTab,
@@ -195,18 +237,21 @@ Each phase ships on its own and leaves the game playable.
    events of the season with results and what's next), Rankings, Profile with career stats. Add
    the walk-on card and the post-match strip. _This fixes the menus and the "can't see anything"
    problem straight away._
-2. **Calendar and circuits (v2 model).** Weeks, choosing events, entry rules with locked reasons,
+2. **Player attributes.** Ratings, XP and levels, skill points, the career throw tuning, the
+   calibration test, and training sessions between events. This works on the current engine.
+3. **Calendar and circuits (v2 model).** Weeks, choosing events, entry rules with locked reasons,
    seeded brackets, `quickSim`, v1→v2 migration.
-3. **Reputation, milestones and inbox.** The wildcard storyline from the pub to the County card.
-4. **The pro game.** Q-School, tour cards, rolling ranking, majors and their qualifiers, losing
+4. **Reputation, milestones and inbox.** The wildcard storyline from the pub to the County card.
+5. **The pro game.** Q-School, tour cards, rolling ranking, majors and their qualifiers, losing
    your card.
-5. **Flavour.** Rivals, nicknames, venues, cosmetics and entry fees.
+6. **Flavour.** Rivals, nicknames, venues, cosmetics and entry fees.
 
-## Decisions needed
+## Decisions (agreed)
 
-- **Money:** purely a score, or used for entry fees and cosmetics? _Recommend fees + cosmetics._
-- **Throwing skill:** no RPG stat boosts to aim? _Recommend no boosts._
-- **Pace:** how long should pub → Pro Tour take? _Suggest 4–6 seasons at about 12 weeks each._
-  Pub matches are 1–2 legs and pro ones are much longer, so the time per season grows as you climb.
-- **Stakes:** can you lose a County card or a Tour card? _Recommend Tour cards can be lost._
-- **Saves:** migrate existing careers, or start fresh? _Recommend migrating._
+- **Money:** entry fees and cosmetics.
+- **Throwing skill:** real RPG attributes. You start debuffed and train up (see
+  [Player attributes](#player-attributes)).
+- **Pace:** pub → Pro Tour in 4–6 seasons of about 12 weeks each.
+- **Stakes:** Tour Cards can be lost. County status is kept.
+- **Saves:** existing careers are migrated. Old saves start with attributes at the level of their
+  current tier.
