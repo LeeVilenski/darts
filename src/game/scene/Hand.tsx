@@ -3,16 +3,19 @@ import type { MeshStandardMaterial } from 'three';
 import { DART } from '../../engine/board/geometry';
 
 /**
- * A hand: palm, four jointed fingers and a thumb.
+ * A right hand: palm, four jointed fingers and a thumb. (Mirror it in x for a
+ * left hand.)
  *
- * Hand-local frame, origin at the wrist: +Y runs toward the knuckles, +Z is the
- * way the palm faces, and the thumb is on -X (a right hand; mirror x for a
- * left hand). Fingers curl in their own Y–Z plane, toward the palm.
+ * Hand-local frame, right-handed, origin at the wrist: +Y runs toward the
+ * knuckles, +Z is the way the palm faces, and +X = Y × Z is the thumb side —
+ * as for a real right hand held up with its palm away from you. Fingers curl in
+ * their own Y–Z plane, toward the palm.
  *
- * The throwing grip holds the dart like a pencil: across the fingertips along
- * the X axis, tip out past the thumb (-X), pinched between the forefinger pad on
- * top and the thumb pad underneath, in front of the palm, with the middle
- * finger tucked under the barrel and the others curled away.
+ * The throwing grip is a darts player's: palm toward the board, the dart
+ * pointing forward (+Z) alongside the forefinger, its barrel pinched between
+ * the side of the forefinger and the thumb, above the palm so nothing passes
+ * through the hand. The middle finger curls under, the ring and little fingers
+ * tuck away.
  */
 
 export type HandPose = 'pinch' | 'relaxed';
@@ -27,21 +30,23 @@ export interface FingerSpec {
   len: readonly [number, number, number];
   r: number;
 }
+/** Forefinger nearest the thumb (+X), little finger furthest (-X). */
 export const FINGERS: readonly FingerSpec[] = [
-  { x: -0.0175, y: 0.082, z: 0.004, len: [0.027, 0.019, 0.017], r: 0.0082 }, // index
-  { x: -0.0058, y: 0.085, z: 0.004, len: [0.03, 0.021, 0.018], r: 0.0084 }, // middle
-  { x: 0.0058, y: 0.083, z: 0.004, len: [0.028, 0.02, 0.017], r: 0.008 }, // ring
-  { x: 0.0168, y: 0.077, z: 0.004, len: [0.022, 0.016, 0.015], r: 0.0072 }, // little
+  { x: 0.0175, y: 0.082, z: 0.004, len: [0.027, 0.019, 0.017], r: 0.0082 }, // fore
+  { x: 0.0058, y: 0.085, z: 0.004, len: [0.03, 0.021, 0.018], r: 0.0084 }, // middle
+  { x: -0.0058, y: 0.083, z: 0.004, len: [0.028, 0.02, 0.017], r: 0.008 }, // ring
+  { x: -0.0168, y: 0.077, z: 0.004, len: [0.022, 0.016, 0.015], r: 0.0072 }, // little
 ];
 
 export const POSES: Record<HandPose, { curls: readonly Curl[]; spread: readonly number[] }> = {
   pinch: {
     curls: [
-      [0.35, 0.75, 0.55], // forefinger arches over the barrel, pad on top
-      [1.08, 1.25, 0.7], // middle finger tucked under the barrel
-      [1.4, 1.45, 0.95], // ring and little fingers curled away
-      [1.5, 1.45, 1.0],
+      [0.4, 0.6, 0.4], // forefinger forward along the barrel
+      [0.8, 1.0, 0.65], // middle finger curled under
+      [1.35, 1.4, 0.9], // ring and little fingers tucked away
+      [1.45, 1.4, 0.95],
     ],
+    // Rotation about Z: positive splays a finger away from the thumb (toward -X).
     spread: [0, 0, 0.05, 0.12],
   },
   relaxed: {
@@ -73,28 +78,22 @@ export function fingerJoints(f: FingerSpec, c: Curl): { points: Vector3[]; angle
 export const BARREL_R = DART.barrelRadius / 1000;
 
 /**
- * Where the dart's barrel sits in the pinch (hand-local): just under the pad of
- * the forefinger's last joint. Derived from the finger geometry, so the dart
- * rests on the fingertip instead of passing through the hand.
+ * Where the dart's barrel is pinched (hand-local): against the thumb side of
+ * the forefinger's middle joint, the dart pointing along +Z. Derived from the
+ * finger geometry, so the barrel rests on the finger rather than in it.
  */
 export const PINCH_POINT = (() => {
-  const index = FINGERS[0]!;
-  const { points, angle } = fingerJoints(index, POSES.pinch.curls[0]!);
-  // The pad is on the palm side of the last segment, a little back from the very tip.
-  const pad = new Vector3(0, -Math.sin(angle), Math.cos(angle));
-  const along = new Vector3(0, Math.cos(angle), Math.sin(angle));
-  return points[3]!
-    .clone()
-    .addScaledVector(along, -index.r * 0.6)
-    .addScaledVector(pad, index.r * 0.85 + BARREL_R);
+  const fore = FINGERS[0]!;
+  const { points } = fingerJoints(fore, POSES.pinch.curls[0]!);
+  const mid = points[1]!.clone().lerp(points[2]!, 0.5);
+  return mid.add(new Vector3(fore.r * 0.92 + BARREL_R, 0, 0));
 })();
 
-/** Thumb: from the heel of the hand to just under the barrel, opposite the forefinger pad. */
+/** Thumb: from the heel of the hand round to the barrel's outer side, opposite the forefinger. */
 export const THUMB = (() => {
-  const base = new Vector3(-0.025, 0.034, 0.014);
+  const base = new Vector3(0.025, 0.034, 0.016);
   const r = 0.0105;
-  // The thumb pad presses up on the barrel from below.
-  const tip = PINCH_POINT.clone().add(new Vector3(-0.004, -(BARREL_R + r * 0.85), 0.002));
+  const tip = PINCH_POINT.clone().add(new Vector3(BARREL_R + r * 0.8, -0.003, 0.004));
   const dir = tip.clone().sub(base);
   const len = dir.length();
   return {
@@ -162,7 +161,7 @@ export function Hand({ pose, material }: { pose: HandPose; material: MeshStandar
           <Finger f={f} curls={p.curls[i]!} material={material} />
         </group>
       ))}
-      {/* Thumb */}
+      {/* Thumb (on +X) */}
       {pose === 'pinch' ? (
         <group position={THUMB.base} quaternion={THUMB.quaternion}>
           <mesh geometry={capsule(THUMB.r, THUMB.seg[0])} material={material} />
@@ -171,7 +170,7 @@ export function Hand({ pose, material }: { pose: HandPose; material: MeshStandar
           </group>
         </group>
       ) : (
-        <group position={[-0.024, 0.03, 0.01]} rotation={[0.35, -0.25, 0.15]} rotation-order="YXZ">
+        <group position={[0.024, 0.03, 0.01]} rotation={[0.35, 0.25, -0.15]} rotation-order="YXZ">
           <mesh geometry={capsule(0.0105, 0.032)} material={material} />
           <group position={[0, 0.032, 0]} rotation={[0.25, 0, 0]}>
             <mesh geometry={capsule(0.0095, 0.026)} material={material} />
@@ -182,6 +181,12 @@ export function Hand({ pose, material }: { pose: HandPose; material: MeshStandar
   );
 }
 
+/** Right-handed basis → quaternion (x = y × z). */
+function basis(y: Vector3, z: Vector3, out: Quaternion) {
+  const x = new Vector3().crossVectors(y, z);
+  return out.setFromRotationMatrix(new Matrix4().makeBasis(x, y, z));
+}
+
 /**
  * Orientation for a hand whose fingers run along `along` with the palm facing
  * `palm` (both world directions; `palm` needn't be exactly perpendicular).
@@ -190,16 +195,13 @@ export function handQuaternion(along: Vector3, palm: Vector3, out = new Quaterni
   const y = along.clone().normalize();
   const z = palm.clone().addScaledVector(y, -palm.dot(y));
   if (z.lengthSq() < 1e-8) z.set(0, 0, 1).addScaledVector(y, -y.z);
-  z.normalize();
-  const x = new Vector3().crossVectors(y, z);
-  return out.setFromRotationMatrix(new Matrix4().makeBasis(x, y, z));
+  return basis(y, z.normalize(), out);
 }
 
 /**
- * Orientation for the throwing hand: fingers along the forearm (`along`), and
- * the dart across the fingertips pointing out past the thumb, as close to
- * `dart` as that allows. Writes the dart direction the hand actually holds
- * (`dart` squared up across the fingers) into `held`.
+ * Orientation for the throwing hand: fingers along the forearm (`along`), palm
+ * toward where the dart points (`dart`). The dart is held square to the
+ * forearm, along the palm's facing; that direction is written into `held`.
  */
 export function gripQuaternion(
   along: Vector3,
@@ -211,7 +213,5 @@ export function gripQuaternion(
   held.copy(dart).addScaledVector(y, -dart.dot(y));
   if (held.lengthSq() < 1e-8) held.set(0, 0, -1).addScaledVector(y, y.z);
   held.normalize();
-  const x = held.clone().negate(); // dart tip toward the thumb (-X)
-  const z = new Vector3().crossVectors(x, y);
-  return out.setFromRotationMatrix(new Matrix4().makeBasis(x, y, z));
+  return basis(y, held, out);
 }
