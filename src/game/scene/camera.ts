@@ -47,9 +47,9 @@ export interface OpponentFraming {
 export const OPPONENT = {
   landscape: {
     pos: { x: 1.2, y: 1.6, z: WORLD.ocheDistance + 1.15 },
-    lookToBoard: 0.36,
+    lookToBoard: 0.3,
     lookDrop: 0.12,
-    half: 0.7,
+    half: 0.74,
     replayHalf: 0.46,
   } satisfies OpponentFraming,
   portrait: {
@@ -66,6 +66,24 @@ export const OPPONENT = {
   panRate: 3,
   /** Stay wide this long after the dart lands before cutting to the board cam (s). */
   holdAfterImpact: 0.5,
+} as const;
+
+/**
+ * Player cam: before an AI player's first dart, a front three-quarter shot of
+ * them stepping up, from between the board and the oche, off to their left
+ * (the side away from the throwing hand, so it doesn't hide their face).
+ * Slowly pushes in, like TV coverage of a player settling.
+ */
+export const PLAYER_CAM = {
+  /** Direction from the player's face to the camera. */
+  dir: new Vector3(-0.62, -0.06, -1).normalize(),
+  dist: 1.25,
+  /** Look this far below the eyes, to take in head and shoulders. */
+  drop: 0.12,
+  /** Framing at the start, and the slow push-in it eases toward. */
+  half: 0.4,
+  pushHalf: 0.33,
+  pushRate: 0.9,
 } as const;
 
 /** Chase cam riding just behind and above the dart. */

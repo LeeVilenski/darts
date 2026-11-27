@@ -3,6 +3,9 @@ import { RELEASE_POINT } from '../../engine/physics/throwModel';
 import {
   ANGLE,
   armAt,
+  AVERAGE_BUILD,
+  blendRest,
+  shoulderWorld,
   ELBOW,
   elbowAt,
   FOREARM,
@@ -75,5 +78,36 @@ describe('throw', () => {
     expect(holdsDart(-0.1)).toBe(true);
     expect(holdsDart(0.1)).toBe(false);
     expect(holdsDart(2)).toBe(true);
+  });
+});
+
+describe('builds and resting arm', () => {
+  it('the throwing arm reaches the still elbow for every build', () => {
+    for (const height of [0.95, 1, 1.05])
+      for (const girth of [0.92, 1, 1.22]) {
+        const upper = shoulderWorld({ height, girth }).distanceTo(ELBOW);
+        expect(upper).toBeGreaterThan(0.2);
+        expect(upper).toBeLessThan(0.36);
+      }
+  });
+
+  it('resting keeps both bones their length and drops the hand to chest height', () => {
+    const shoulder = shoulderWorld(AVERAGE_BUILD);
+    const elbow = elbowAt(5);
+    const grip = gripAt(5);
+    const upper = shoulder.distanceTo(elbow);
+    blendRest(shoulder, elbow, grip, 1);
+    expect(elbow.distanceTo(shoulder)).toBeCloseTo(upper, 6);
+    expect(grip.distanceTo(elbow)).toBeCloseTo(FOREARM, 6);
+    expect(grip.y).toBeLessThan(shoulder.y - 0.1);
+  });
+
+  it('a zero blend leaves the throw pose alone', () => {
+    const shoulder = shoulderWorld(AVERAGE_BUILD);
+    const elbow = elbowAt(-0.1);
+    const grip = gripAt(-0.1);
+    const before = grip.clone();
+    blendRest(shoulder, elbow, grip, 0);
+    expect(grip.distanceTo(before)).toBe(0);
   });
 });

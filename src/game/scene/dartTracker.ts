@@ -9,7 +9,11 @@ export const dartTracker = {
 };
 
 /** When the current live AI dart leaves (or left) the thrower's hand (performance.now() ms). */
-export const throwerClock = { releaseAt: -Infinity };
+export const throwerClock = {
+  releaseAt: -Infinity,
+  /** Until when the player cam (a front shot of the thrower stepping up) is on (performance.now() ms). */
+  playerCamUntil: -Infinity,
+};
 
 if (import.meta.env.DEV && typeof window !== 'undefined') {
   (window as unknown as { __throwerClock: typeof throwerClock }).__throwerClock = throwerClock;

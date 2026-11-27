@@ -30,6 +30,8 @@ const IMPACT_HOLD = { cinematic: 1100, reduced: 700, fast: 250 } as const;
 /** Pause on an AI turn's result before collecting automatically (ms). */
 const AI_TURN_END_HOLD = { normal: 1700, fast: 350 } as const;
 const AI_FAST_THINK_MS = 120;
+/** How long the player cam holds on the AI stepping up before its first dart (ms). */
+const PLAYER_CAM_MS = 1400;
 
 /** How long to hold on the replayed dart after it lands (ms). */
 const REPLAY_HOLD = 1000;
@@ -102,7 +104,11 @@ function useAiTurns() {
     if (screen !== 'game' || !match || !level) return;
     let t: number | undefined;
     if (phase === 'aiming' && match.status === 'open') {
-      const delay = aiFast ? AI_FAST_THINK_MS : aiThinkDelay();
+      // Before the first dart of a turn the player steps up to the oche: a front shot of
+      // them settling, then the camera moves round beside the oche for the throw.
+      const stepUp = !aiFast && useGameStore.getState().darts.length === 0;
+      const delay = (aiFast ? AI_FAST_THINK_MS : aiThinkDelay()) + (stepUp ? PLAYER_CAM_MS : 0);
+      throwerClock.playerCamUntil = stepUp ? performance.now() + PLAYER_CAM_MS : -Infinity;
       // The thrower draws back and drives forward for WINDUP_S before the dart leaves the hand.
       const windup = aiFast ? 0 : WINDUP_S * 1000;
       const think = Math.max(0, delay - windup);
