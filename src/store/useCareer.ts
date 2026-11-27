@@ -1,6 +1,5 @@
 import { create } from 'zustand';
 import {
-  attributesForTier,
   careerTuning,
   spendPoint,
   swayScale,
@@ -11,35 +10,26 @@ import {
   canTrain,
   dismissSeason,
   DRILLS,
+  enterEvent,
   newCareer,
   nextMatch,
   recordResult,
   recordTraining,
+  skipWeek,
   type CareerState,
 } from '../engine/career/career';
-import { emptyCareerStats } from '../engine/career/stats';
+import { loadCareer } from '../engine/career/migrate';
 import { MODE_DEFAULTS } from '../engine/modes/match';
 import { ASSIST } from '../engine/physics/throwModel';
 import { setCareerThrow, useGameStore, type MatchSetup } from './useGameStore';
 
-const KEY = 'darts.career.v1';
-
-/** Fill in fields added since a save was written. */
-export function upgrade(c: CareerState): CareerState {
-  return {
-    ...c,
-    stats: c.stats ?? emptyCareerStats(),
-    attributes: c.attributes ?? attributesForTier(c.tier),
-    lastGain: c.lastGain ?? null,
-    trainedFor: c.trainedFor ?? null,
-  };
-}
+const KEY = 'darts.career.v2';
+const OLD_KEY = 'darts.career.v1';
 
 function load(): CareerState | null {
   try {
-    const raw = localStorage.getItem(KEY);
-    const c = raw ? (JSON.parse(raw) as CareerState) : null;
-    return c?.version === 1 ? upgrade(c) : null;
+    const raw = localStorage.getItem(KEY) ?? localStorage.getItem(OLD_KEY);
+    return raw ? loadCareer(JSON.parse(raw)) : null;
   } catch {
     return null;
   }
@@ -47,7 +37,10 @@ function load(): CareerState | null {
 function save(c: CareerState | null) {
   try {
     if (c) localStorage.setItem(KEY, JSON.stringify(c));
-    else localStorage.removeItem(KEY);
+    else {
+      localStorage.removeItem(KEY);
+      localStorage.removeItem(OLD_KEY);
+    }
   } catch {
     /* storage unavailable: the career lasts for this session only */
   }
@@ -59,6 +52,10 @@ interface CareerStore {
   open: boolean;
   setOpen(open: boolean): void;
   start(name: string): void;
+  /** Enter one of this week's events. */
+  enter(id: string): void;
+  /** Play this week without you. */
+  skipWeek(): void;
   /** Start your next match. */
   play(): void;
   /** Start a training session for an attribute. */
@@ -81,6 +78,14 @@ export const useCareer = create<CareerStore>((set, get) => ({
   },
   start(name) {
     update(newCareer(name, (Date.now() ^ (Math.random() * 0x7fffffff)) >>> 0));
+  },
+  enter(id) {
+    const c = get().career;
+    if (c) update(enterEvent(c, id));
+  },
+  skipWeek() {
+    const c = get().career;
+    if (c) update(skipWeek(c));
   },
   play() {
     const c = get().career;
@@ -109,7 +114,7 @@ export const useCareer = create<CareerStore>((set, get) => ({
   },
   spendPoint(attr) {
     const c = get().career;
-    if (c?.attributes) update({ ...c, attributes: spendPoint(c.attributes, attr, c.tier) });
+    if (c) update({ ...c, attributes: spendPoint(c.attributes, attr, c.tier) });
   },
   dismissSeason() {
     const c = get().career;
@@ -123,12 +128,12 @@ export const useCareer = create<CareerStore>((set, get) => ({
 // Your attributes shape your throw in career matches and training.
 setCareerThrow(
   (aim, pressure, rng) => {
-    const r = useCareer.getState().career?.attributes?.ratings;
+    const r = useCareer.getState().career?.attributes.ratings;
     if (!r) return null;
     return careerTuning(ASSIST[useGameStore.getState().assist], r, aim, pressure, rng).tuning;
   },
   () => {
-    const r = useCareer.getState().career?.attributes?.ratings;
+    const r = useCareer.getState().career?.attributes.ratings;
     return r ? swayScale(r) : 1;
   },
 );

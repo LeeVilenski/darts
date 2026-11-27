@@ -94,8 +94,8 @@ export function TrainingCard({ c }: { c: CareerState }) {
       <div className="eyebrow">Training</div>
       <p>
         {ready
-          ? 'One session before your next match. Pick a drill: it works one attribute hardest.'
-          : 'Trained for this event. You can train again before the next one.'}
+          ? 'One session a week. Pick a drill: it works one attribute hardest.'
+          : 'Trained this week. You can train again next week.'}
       </p>
       <div className="drill-grid">
         {ATTRS.map((attr) => (

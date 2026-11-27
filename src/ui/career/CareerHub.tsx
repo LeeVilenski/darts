@@ -2,28 +2,40 @@ import { useState } from 'react';
 import { describePersonality, personalityFor } from '../../engine/ai/personality';
 import { AI_SKILL } from '../../engine/ai/skill';
 import {
+  describeReached,
+  eligibility,
+  eventById,
+  holdsCard,
   nameOf,
   nextMatch,
-  promotionRace,
-  seasonSchedule,
+  ordinal,
+  playerById,
+  resultFor,
   standings,
+  tourPosition,
+  weekEvents,
   YOU,
   type BracketMatch,
+  type CalEvent,
   type CareerState,
+  type LiveEvent,
 } from '../../engine/career/career';
-import { careerAverage, emptyCareerStats, form, winRate } from '../../engine/career/stats';
 import {
+  CIRCUIT_INFO,
+  CIRCUITS,
   describeFormat,
-  EVENTS_PER_SEASON,
-  PRIZE_SHARE,
-  PROMOTION_PLACES,
-  ROUND_NAMES,
-  TIERS,
-  type Reached,
-} from '../../engine/career/tiers';
+  prizeShare,
+  roundNames,
+  TOUR_CARD_KEEP,
+  WEEKS_PER_SEASON,
+  type CircuitId,
+} from '../../engine/career/circuits';
+import { goals } from '../../engine/career/goals';
+import { careerAverage, form, winRate } from '../../engine/career/stats';
 import { appearanceFor } from '../../game/scene/appearance';
 import { useCareer } from '../../store/useCareer';
 import { Icon } from '../icons';
+import { Segmented } from '../Segmented';
 import { AttributePanel, RatingsLine, TrainingCard } from './Attributes';
 
 type Tab = 'home' | 'calendar' | 'rankings' | 'profile';
@@ -34,23 +46,14 @@ const TABS: { id: Tab; label: string }[] = [
   { id: 'profile', label: 'Profile' },
 ];
 
-export const REACHED: Record<Reached, string> = {
-  QF: 'Quarter-finals',
-  SF: 'Semi-finals',
-  F: 'Runner-up',
-  W: 'Winner',
-};
-const SHORT: Record<Reached, string> = { QF: 'QF', SF: 'SF', F: 'Final', W: 'Won' };
-/** Visual theme per tier: chalk and wood at the pub up to broadcast gold on tour. */
+/** Visual theme per stage: chalk and wood at the pub up to broadcast gold on tour. */
 const THEMES = ['pub', 'county', 'challenge', 'tour'] as const;
+export const STAGE_NAMES = CIRCUITS.map((c) => CIRCUIT_INFO[c].name);
+const VENUES = { pub: 'The pub', hall: 'County hall', floor: 'Floor event', stage: 'TV stage' };
 
 export const money = (n: number) => `£${n.toLocaleString('en-GB')}`;
-export const ordinal = (n: number) => {
-  const t = n % 100;
-  const s = t >= 11 && t <= 13 ? 'th' : (['th', 'st', 'nd', 'rd'][n % 10] ?? 'th');
-  return `${n}${s}`;
-};
-const pct = (x: number) => `${Math.round(x * 100)}%`;
+const plural = (n: number, w: string) => `${n} ${w}${n === 1 ? '' : 's'}`;
+const pct = (x: number) => `${Math.round(Math.min(1, Math.max(0, x)) * 100)}%`;
 
 /** Career mode: a full-screen hub over the menu. */
 export function CareerHub() {
@@ -69,7 +72,7 @@ export function CareerHub() {
           <h2>{career ? career.you : 'Career'}</h2>
           {career && (
             <span className="hub-sub">
-              {TIERS[career.tier]!.name} · Season {career.season}
+              {STAGE_NAMES[career.tier]} · Season {career.season} · Week {career.week}
             </span>
           )}
         </div>
@@ -116,12 +119,13 @@ function NewCareer() {
     <div className="hub-body">
       <div className="hub-card hero">
         <p>
-          Every pro started down the pub. Begin at your local in the <b>Pub League</b> and work your
-          way up through the County Circuit and the Challenge Tour to the <b>Pro Tour</b>.
+          Every pro started down the pub. Begin at your local and work your way up: a County card,
+          the Challenge Tour, Q-School, and a <b>Tour Card</b>.
         </p>
         <p className="muted">
-          Each season has {EVENTS_PER_SEASON} knockout events. Finish in the top {PROMOTION_PLACES}{' '}
-          of the order of merit to move up a tier.
+          A season is {WEEKS_PER_SEASON} weeks. Each week, pick an event you&apos;re eligible for
+          (or rest) and squeeze in a training session. Your throwing starts rough: play and train to
+          improve it.
         </p>
       </div>
       <div className="field">
@@ -149,28 +153,25 @@ function NewCareer() {
 /* ---------------------------------------------------------------- home */
 
 function HomeTab({ c, onTab }: { c: CareerState; onTab(t: Tab): void }) {
-  const play = useCareer((s) => s.play);
   const dismiss = useCareer((s) => s.dismissSeason);
   const next = nextMatch(c);
-  const stats = c.stats ?? emptyCareerStats();
-  const last = c.results.at(-1);
-  const race = promotionRace(c);
-  const tier = TIERS[c.tier]!;
+  const live = c.event ?? c.lastEvent;
+  const liveEvent = live ? eventById(c, live.id) : null;
 
   return (
     <>
       {c.lastSeason && (
         <div className="hub-card season-review" data-testid="season-summary">
           <div className="eyebrow">Season {c.lastSeason.season} review</div>
-          <div className="big">
-            {ordinal(c.lastSeason.position)} in the {TIERS[c.lastSeason.tier]!.name}
-          </div>
+          {c.lastSeason.places.map((p) => (
+            <div key={p.circuit} className="big">
+              {ordinal(p.position)} of {p.of} · {CIRCUIT_INFO[p.circuit].name}
+            </div>
+          ))}
           <p>
-            {c.lastSeason.promoted
-              ? `Promoted! Next season you play on the ${tier.name}.`
-              : c.lastSeason.tier === TIERS.length - 1
-                ? 'Another season on the Pro Tour. Defend your place.'
-                : `Top ${PROMOTION_PLACES} go up. Another crack at the ${tier.name}.`}
+            {c.lastSeason.changes.length
+              ? c.lastSeason.changes.join('. ') + '.'
+              : `Another season as a ${STAGE_NAMES[c.tier]} player.`}
           </p>
           <button type="button" className="primary-btn small" onClick={dismiss}>
             Start season {c.season}
@@ -178,86 +179,170 @@ function HomeTab({ c, onTab }: { c: CareerState; onTab(t: Tab): void }) {
         </div>
       )}
 
-      {next && (
-        <div className="hub-card fixture" data-testid="next-match">
-          <div className="eyebrow">
-            {c.event.name} · {ROUND_NAMES[next.round]} · Event {c.eventIndex + 1} of{' '}
-            {EVENTS_PER_SEASON}
-          </div>
-          <div className="fixture-vs">
-            <PlayerBadge name={c.you} />
-            <span className="vs">v</span>
-            <PlayerBadge name={next.opponent.name} />
-          </div>
-          <div className="fixture-names">
-            <span className="you">{c.you}</span>
-            <span>{next.opponent.name}</span>
-          </div>
-          <dl className="fixture-facts">
-            <div>
-              <dt>Opponent</dt>
-              <dd>
-                {AI_SKILL[next.opponent.level].label} level ·{' '}
-                {describePersonality(personalityFor(next.opponent.name))}
-              </dd>
-            </div>
-            {c.attributes && (
-              <div>
-                <dt>Your game</dt>
-                <dd>
-                  <RatingsLine a={c.attributes} />
-                </dd>
-              </div>
-            )}
-            <div>
-              <dt>Head to head</dt>
-              <dd>{h2hLine(stats.h2h[next.opponent.id])}</dd>
-            </div>
-            <div>
-              <dt>Format</dt>
-              <dd>501 · {describeFormat(next.format)} · bull-up to throw first</dd>
-            </div>
-            <div>
-              <dt>At stake</dt>
-              <dd>{stakeLine(c, next.round)}</dd>
-            </div>
-          </dl>
-          <button type="button" className="primary-btn" onClick={play} data-testid="career-play">
-            Play {ROUND_NAMES[next.round]!.toLowerCase()}
-          </button>
-        </div>
-      )}
-
-      {next && <TrainingCard c={c} />}
+      {next ? <Fixture c={c} /> : <ThisWeek c={c} />}
+      <TrainingCard c={c} />
 
       <div className="hub-row">
         <div className="hub-card stat-card">
           <div className="eyebrow">Form</div>
-          <FormStrip results={form(stats, 5)} />
+          <FormStrip results={form(c.stats, 5)} />
         </div>
         <button type="button" className="hub-card stat-card link" onClick={() => onTab('rankings')}>
-          <div className="eyebrow">Order of merit</div>
-          <div className="big">
-            {ordinal(race.position)} <span className="muted small">· {race.points} pts</span>
-          </div>
+          <MyStanding c={c} />
         </button>
       </div>
 
-      <div className="hub-card goal">
-        <div className="eyebrow">Next goal</div>
-        <GoalLine c={c} />
-      </div>
+      {goals(c).map((g) => (
+        <div key={g.title} className="hub-card goal">
+          <div className="eyebrow">Goal</div>
+          <b>{g.title}</b>
+          <p className="muted">{g.detail}</p>
+          {g.progress !== null && (
+            <div className="progress" aria-hidden="true">
+              <span style={{ width: pct(g.progress) }} />
+            </div>
+          )}
+        </div>
+      ))}
 
-      {last && !c.lastSeason && (
-        <p className="career-last">
-          Last event: {last.name}, {REACHED[last.reached].toLowerCase()} (+{last.points} pts,{' '}
-          {money(last.prize)})
-        </p>
+      {live && liveEvent && (
+        <>
+          <h3>
+            {c.event ? '' : 'Last time: '}
+            {liveEvent.name}
+          </h3>
+          <Bracket c={c} live={live} field={liveEvent.field} />
+        </>
       )}
-
-      <h3>{c.event.name} draw</h3>
-      <Bracket c={c} />
     </>
+  );
+}
+
+function MyStanding({ c }: { c: CareerState }) {
+  if (holdsCard(c, 'tour')) {
+    const pos = tourPosition(c);
+    return (
+      <>
+        <div className="eyebrow">Tour ranking</div>
+        <div className="big">{pos ? ordinal(pos) : '–'}</div>
+      </>
+    );
+  }
+  const circuit: CircuitId = c.cards.challenge ? 'challenge' : c.cards.county ? 'county' : 'pub';
+  const table = standings(c, circuit);
+  const pos = table.findIndex((s) => s.id === YOU) + 1;
+  return (
+    <>
+      <div className="eyebrow">{CIRCUIT_INFO[circuit].short} merit</div>
+      <div className="big">
+        {ordinal(pos)}{' '}
+        <span className="muted small">· {plural(c.merit[circuit][YOU] ?? 0, 'pt')}</span>
+      </div>
+    </>
+  );
+}
+
+/** No event entered yet: this week's events, with Enter or why you can't. */
+function ThisWeek({ c }: { c: CareerState }) {
+  const enter = useCareer((s) => s.enter);
+  const skip = useCareer((s) => s.skipWeek);
+  const events = weekEvents(c).filter((e) => relevant(c, e) || eligibility(c, e).ok);
+  const open = events.filter((e) => eligibility(c, e).ok);
+  return (
+    <div className="hub-card fixture" data-testid="this-week">
+      <div className="eyebrow">
+        Week {c.week} of {WEEKS_PER_SEASON}
+      </div>
+      <b>{open.length ? 'Pick your event this week' : 'Nothing for you this week'}</b>
+      <ul className="week-events">
+        {events.map((e) => {
+          const ok = eligibility(c, e);
+          return (
+            <li key={e.id} className={ok.ok ? '' : 'locked'}>
+              <div className="cal-main">
+                <span>
+                  <CircuitTag circuit={e.circuit} />
+                </span>
+                <b>{e.name}</b>
+                <span className="muted small">
+                  {e.field} players · {VENUES[e.venue]}
+                  {e.prize ? ` · ${money(e.prize)} to the winner` : ''}
+                </span>
+                {!ok.ok && <span className="lock-reason">🔒 {ok.reason}</span>}
+                {ok.ok && ok.via === 'invite' && (
+                  <span className="gold small">You have a place</span>
+                )}
+              </div>
+              {ok.ok && (
+                <button
+                  type="button"
+                  className="primary-btn small"
+                  onClick={() => enter(e.id)}
+                  data-testid={`enter-${e.slug}`}
+                >
+                  {ok.via === 'fee' ? `Enter (${money(e.fee ?? 0)})` : 'Enter'}
+                </button>
+              )}
+            </li>
+          );
+        })}
+      </ul>
+      <button type="button" className="ghost-btn" onClick={skip} data-testid="skip-week">
+        {open.length ? 'Skip this week' : 'Rest and move on'}
+      </button>
+    </div>
+  );
+}
+
+function Fixture({ c }: { c: CareerState }) {
+  const play = useCareer((s) => s.play);
+  const next = nextMatch(c)!;
+  const e = next.event;
+  return (
+    <div className="hub-card fixture" data-testid="next-match">
+      <div className="eyebrow">
+        {e.name} · {next.roundName} · {VENUES[e.venue]}
+      </div>
+      <div className="fixture-vs">
+        <PlayerBadge name={c.you} />
+        <span className="vs">v</span>
+        <PlayerBadge name={next.opponent.name} />
+      </div>
+      <div className="fixture-names">
+        <span className="you">{c.you}</span>
+        <span>{next.opponent.name}</span>
+      </div>
+      <dl className="fixture-facts">
+        <div>
+          <dt>Opponent</dt>
+          <dd>
+            {AI_SKILL[next.opponent.level].label} level ·{' '}
+            {describePersonality(personalityFor(next.opponent.name))}
+          </dd>
+        </div>
+        <div>
+          <dt>Your game</dt>
+          <dd>
+            <RatingsLine a={c.attributes} />
+          </dd>
+        </div>
+        <div>
+          <dt>Head to head</dt>
+          <dd>{h2hLine(c.stats.h2h[next.opponent.id])}</dd>
+        </div>
+        <div>
+          <dt>Format</dt>
+          <dd>501 · {describeFormat(next.format)} · bull-up to throw first</dd>
+        </div>
+        <div>
+          <dt>At stake</dt>
+          <dd>{stakeLine(e, next.round)}</dd>
+        </div>
+      </dl>
+      <button type="button" className="primary-btn" onClick={play} data-testid="career-play">
+        Play {next.roundName.toLowerCase()}
+      </button>
+    </div>
   );
 }
 
@@ -267,43 +352,25 @@ function h2hLine(r: [number, number] | undefined) {
   return `${w}–${l}${w > l ? ' to you' : w < l ? ' to them' : ''}`;
 }
 
-function stakeLine(c: CareerState, round: number) {
-  const tier = TIERS[c.tier]!;
-  if (round === 2) return `The title, ${tier.points.W} merit points and ${money(tier.prize)}`;
-  const reach: Reached = round === 0 ? 'SF' : 'F';
-  return `A place in the ${ROUND_NAMES[round + 1]!.toLowerCase()}: ${tier.points[reach]} pts and ${money(
-    Math.round(tier.prize * PRIZE_SHARE[reach]),
-  )} guaranteed`;
-}
-
-function GoalLine({ c }: { c: CareerState }) {
-  const race = promotionRace(c);
-  const nextTier = TIERS[c.tier + 1];
-  if (race.top || !nextTier) {
-    return (
-      <p>
-        Top of the tree. Win the order of merit: you&apos;re {ordinal(race.position)} with{' '}
-        {race.eventsLeft} event{race.eventsLeft === 1 ? '' : 's'} to go.
-      </p>
-    );
-  }
-  const inPlace = race.position <= PROMOTION_PLACES;
-  const progress = inPlace ? 1 : race.points / Math.max(1, race.points + race.gap);
-  return (
-    <>
-      <p>
-        Finish top {PROMOTION_PLACES} to reach the <b>{nextTier.name}</b>.{' '}
-        {inPlace
-          ? `You're in a promotion place. Hold on with ${race.eventsLeft} event${race.eventsLeft === 1 ? '' : 's'} left.`
-          : race.gap > race.maxToCome
-            ? 'Out of reach this season. Bank points for next time.'
-            : `${race.gap} pts behind ${ordinal(PROMOTION_PLACES)} with ${race.eventsLeft} event${race.eventsLeft === 1 ? '' : 's'} left.`}
-      </p>
-      <div className="progress" aria-hidden="true">
-        <span style={{ width: pct(progress) }} />
-      </div>
-    </>
-  );
+function stakeLine(e: CalEvent, round: number) {
+  const rounds = roundNames(e.field).length;
+  const pts = CIRCUIT_INFO[e.circuit].points(e.field);
+  if (e.kind === 'qschool')
+    return round >= rounds - 3
+      ? 'Win this for a Tour Card'
+      : round === rounds - 4
+        ? 'Win for a Challenge Tour card, and a shot at a Tour Card'
+        : 'Keep going: the last 4 win Tour Cards';
+  if (e.kind === 'qualifier')
+    return round >= rounds - 2
+      ? 'Reach the final for a place in the major'
+      : 'A step closer to the major';
+  const tour = e.circuit === 'tour';
+  if (round === rounds - 1)
+    return `The title${tour ? '' : `, ${pts[rounds]} pts`} and ${money(e.prize)}`;
+  const prize = Math.round(e.prize * prizeShare(rounds, round + 1));
+  const next = roundNames(e.field)[round + 1]!.toLowerCase();
+  return `A place in the ${next}${tour ? '' : `: ${pts[round + 1]} pts`} and ${money(prize)} guaranteed`;
 }
 
 function FormStrip({ results }: { results: string[] }) {
@@ -317,6 +384,10 @@ function FormStrip({ results }: { results: string[] }) {
       ))}
     </div>
   );
+}
+
+function CircuitTag({ circuit }: { circuit: CircuitId }) {
+  return <span className={`circuit-tag ${circuit}`}>{CIRCUIT_INFO[circuit].short}</span>;
 }
 
 /** A round badge in the player's shirt colours with their initials. */
@@ -350,111 +421,149 @@ export function PlayerBadge({ name, size = 56 }: { name: string; size?: number }
 /* ---------------------------------------------------------------- calendar */
 
 function CalendarTab({ c }: { c: CareerState }) {
-  const tier = TIERS[c.tier]!;
-  const next = nextMatch(c);
-  const nextTier = TIERS[c.tier + 1];
+  const [filter, setFilter] = useState<'mine' | 'all'>('mine');
+  const weeks = Array.from({ length: WEEKS_PER_SEASON }, (_, i) => i + 1);
   return (
     <>
-      <h3>
-        Season {c.season} · {tier.name}
-      </h3>
-      <ol className="calendar">
-        {seasonSchedule(c).map((e) => (
-          <li key={e.index} className={`cal-event ${e.status}`} data-testid="calendar-event">
-            <span className="cal-num">{e.index + 1}</span>
-            <div className="cal-main">
-              <b>{e.name}</b>
-              <span className="muted small">
-                {e.index === EVENTS_PER_SEASON - 1 ? 'Season finale · ' : ''}8-player knockout ·
-                final {describeFormat(tier.formats[2]).toLowerCase()} · {money(tier.prize)} to the
-                winner
-              </span>
-            </div>
-            <span className={`chip ${e.result?.reached === 'W' ? 'gold' : ''}`}>
-              {e.status === 'done' && e.result
-                ? `${SHORT[e.result.reached]} · +${e.result.points}`
-                : e.status === 'current'
-                  ? next
-                    ? `Now: ${ROUND_NAMES[next.round]}`
-                    : 'Now'
-                  : 'Upcoming'}
-            </span>
-          </li>
-        ))}
+      <Segmented<'mine' | 'all'>
+        label={`Season ${c.season}`}
+        value={filter}
+        options={[
+          { value: 'mine', label: 'My circuits' },
+          { value: 'all', label: 'Everything' },
+        ]}
+        onChange={setFilter}
+      />
+      <ol className="calendar weeks">
+        {weeks.map((w) => {
+          const events = weekEvents(c, w).filter(
+            (e) => filter === 'all' || relevant(c, e) || resultFor(c, e.id),
+          );
+          return (
+            <li key={w} className={`week ${w === c.week ? 'current' : w < c.week ? 'done' : ''}`}>
+              <span className="cal-num">{w}</span>
+              <div className="week-list">
+                {events.length === 0 && (
+                  <span className="muted small">Nothing on your circuits</span>
+                )}
+                {events.map((e) => (
+                  <CalendarEvent key={e.id} c={c} e={e} />
+                ))}
+              </div>
+            </li>
+          );
+        })}
       </ol>
-
-      {nextTier && (
-        <>
-          <h3>Next tier: {nextTier.name}</h3>
-          <ol className="calendar locked">
-            {nextTier.events.map((name, i) => (
-              <li key={i} className="cal-event upcoming">
-                <span className="cal-num" aria-label="Locked">
-                  🔒
-                </span>
-                <div className="cal-main">
-                  <b>{name}</b>
-                  <span className="muted small">{money(nextTier.prize)} to the winner</span>
-                </div>
-              </li>
-            ))}
-          </ol>
-          <p className="muted small">
-            Finish top {PROMOTION_PLACES} on the order of merit to unlock.
-          </p>
-        </>
-      )}
-
-      <h3>Points</h3>
-      <table className="stats points-table">
-        <thead>
-          <tr>
-            <th />
-            {(['QF', 'SF', 'F', 'W'] as Reached[]).map((r) => (
-              <th key={r}>{SHORT[r]}</th>
-            ))}
-          </tr>
-        </thead>
-        <tbody>
-          <tr>
-            <th scope="row">Merit pts</th>
-            {(['QF', 'SF', 'F', 'W'] as Reached[]).map((r) => (
-              <td key={r}>{tier.points[r]}</td>
-            ))}
-          </tr>
-        </tbody>
-      </table>
     </>
+  );
+}
+
+/** Events on your circuits, or one step up (so you can see what's next). */
+function relevant(c: CareerState, e: CalEvent): boolean {
+  if (e.kind === 'qschool') return c.tier >= 1 && c.tier < 3;
+  if (c.tier >= 2 && e.circuit === 'pub') return false;
+  return CIRCUIT_INFO[e.circuit].stage <= c.tier + 1;
+}
+
+function CalendarEvent({ c, e }: { c: CareerState; e: CalEvent }) {
+  const mine = resultFor(c, e.id);
+  const ok = eligibility(c, e);
+  const entered = c.event?.id === e.id;
+  const locked = !ok.ok && !mine && !e.result;
+  const chip = mine
+    ? describeReached(mine)
+    : entered
+      ? 'Playing'
+      : e.result
+        ? `Won by ${nameOf(c, e.result.winner).split(' ').at(-1)}`
+        : ok.ok
+          ? 'Open to you'
+          : '🔒';
+  return (
+    <div
+      className={`cal-event ${mine ? 'done' : ''} ${locked ? 'locked' : ''}`}
+      data-testid="calendar-event"
+    >
+      <div className="cal-main">
+        <span>
+          <CircuitTag circuit={e.circuit} />
+        </span>
+        <b>{e.name}</b>
+        <span className="muted small">
+          {e.field} players · final {describeFormat(e.formats.at(-1)!).toLowerCase()}
+          {e.prize ? ` · ${money(e.prize)}` : ''}
+        </span>
+        {locked && !ok.ok && <span className="lock-reason">{ok.reason}</span>}
+      </div>
+      <span
+        className={`chip ${mine && mine.round === roundNames(mine.field).length ? 'gold' : ''}`}
+      >
+        {chip}
+      </span>
+    </div>
   );
 }
 
 /* ---------------------------------------------------------------- rankings */
 
+const CUTS: Record<CircuitId, [number, string][]> = {
+  pub: [
+    [2, 'County card'],
+    [8, 'Finals Night'],
+  ],
+  county: [
+    [2, 'Challenge card'],
+    [16, 'County Championship'],
+  ],
+  challenge: [
+    [2, 'Tour Card'],
+    [16, 'Challenge Finals'],
+  ],
+  tour: [
+    [14, 'Majors'],
+    [TOUR_CARD_KEEP, 'Keeps card'],
+  ],
+};
+
 function RankingsTab({ c }: { c: CareerState }) {
-  const table = standings(c);
-  const top = c.tier === TIERS.length - 1;
+  const start: CircuitId = holdsCard(c, 'tour')
+    ? 'tour'
+    : c.cards.challenge
+      ? 'challenge'
+      : c.cards.county
+        ? 'county'
+        : 'pub';
+  const [circuit, setCircuit] = useState<CircuitId>(start);
+  const table = standings(c, circuit);
+  const tour = circuit === 'tour';
+  const cutAt = new Map(CUTS[circuit]);
   return (
     <>
-      <h3>{TIERS[c.tier]!.name} order of merit</h3>
+      <Segmented<CircuitId>
+        label="Table"
+        value={circuit}
+        options={CIRCUITS.map((x) => ({ value: x, label: CIRCUIT_INFO[x].short }))}
+        onChange={setCircuit}
+      />
       <p className="muted small">
-        After {c.eventIndex} of {EVENTS_PER_SEASON} events.{' '}
-        {top
-          ? 'The top of the table wins the order of merit.'
-          : `Top ${PROMOTION_PLACES} are promoted.`}
+        {tour
+          ? 'Prize money over the last two seasons.'
+          : `Order of merit after week ${c.week - 1}.`}{' '}
+        {CUTS[circuit].map(([n, what]) => `Top ${n}: ${what}`).join(' · ')}
       </p>
       <table className="stats merit" data-testid="merit">
         <tbody>
           {table.map((row, i) => (
             <tr
               key={row.id}
-              className={`${row.id === YOU ? 'you' : ''}${!top && i === PROMOTION_PLACES - 1 ? ' cut' : ''}`}
+              className={`${row.id === YOU ? 'you' : ''}${cutAt.has(i + 1) ? ' cut' : ''}`}
             >
               <td>{i + 1}</td>
               <th scope="row">{row.name}</th>
               <td className="muted small">
-                {row.id === YOU ? '' : AI_SKILL[c.roster.find((p) => p.id === row.id)!.level].label}
+                {row.id === YOU ? '' : AI_SKILL[playerById(c, row.id)!.level].label}
               </td>
-              <td>{row.points}</td>
+              <td>{tour ? money(row.points) : row.points}</td>
             </tr>
           ))}
         </tbody>
@@ -468,7 +577,7 @@ function RankingsTab({ c }: { c: CareerState }) {
 function ProfileTab({ c }: { c: CareerState }) {
   const retire = useCareer((s) => s.retire);
   const [confirmRetire, setConfirmRetire] = useState(false);
-  const s = c.stats ?? emptyCareerStats();
+  const s = c.stats;
   const tiles: [string, string][] = [
     ['Matches', String(s.matches)],
     ['Win rate', s.matches ? pct(winRate(s)) : '–'],
@@ -480,6 +589,11 @@ function ProfileTab({ c }: { c: CareerState }) {
     ['Legs', `${s.legsWon}–${s.legsLost}`],
   ];
   const seasons = [...new Set(c.results.map((r) => r.season))].sort((a, b) => b - a);
+  const cards = [
+    c.cards.county && 'County card',
+    c.cards.challenge && 'Challenge Tour card',
+    holdsCard(c, 'tour') && `Tour Card (to season ${c.cards.tour})`,
+  ].filter(Boolean) as string[];
 
   return (
     <>
@@ -488,7 +602,18 @@ function ProfileTab({ c }: { c: CareerState }) {
         <div>
           <div className="big">{c.you}</div>
           <div className="muted small">
-            {TIERS[c.tier]!.name} · season {c.season} · {money(c.earnings)} won
+            {STAGE_NAMES[c.tier]} · season {c.season} · {money(c.earnings)} won
+          </div>
+          <div className="card-badges">
+            {cards.length ? (
+              cards.map((x) => (
+                <span key={x} className="chip gold">
+                  {x}
+                </span>
+              ))
+            ) : (
+              <span className="chip">Amateur</span>
+            )}
           </div>
         </div>
       </div>
@@ -533,8 +658,8 @@ function ProfileTab({ c }: { c: CareerState }) {
                 .map((r, i) => (
                   <li key={i}>
                     <span>{r.name}</span>
-                    <span className={r.reached === 'W' ? 'gold' : 'muted'}>
-                      {REACHED[r.reached]} · {money(r.prize)}
+                    <span className={r.round === roundNames(r.field).length ? 'gold' : 'muted'}>
+                      {describeReached(r)} · {money(r.prize)}
                     </span>
                   </li>
                 ))}
@@ -555,10 +680,10 @@ function ProfileTab({ c }: { c: CareerState }) {
               <li key={i}>
                 <span>
                   <b className={m.won ? 'good' : 'bad'}>{m.won ? 'W' : 'L'}</b> {m.score[0]}–
-                  {m.score[1]} v {nameOf(c, m.opponent)}
+                  {m.score[1]} v {m.opponentName ?? nameOf(c, m.opponent)}
                 </span>
                 <span className="muted">
-                  {ROUND_NAMES[m.round]} · avg {m.average.toFixed(1)}
+                  {m.roundName ?? m.event} · avg {m.average.toFixed(1)}
                 </span>
               </li>
             ))}
@@ -582,15 +707,16 @@ function ProfileTab({ c }: { c: CareerState }) {
 
 /* ---------------------------------------------------------------- bracket */
 
-export function Bracket({ c }: { c: CareerState }) {
-  const rounds: (BracketMatch | null)[][] = [...c.event.rounds];
+export function Bracket({ c, live, field }: { c: CareerState; live: LiveEvent; field: number }) {
+  const names = roundNames(field);
+  const rounds: (BracketMatch | null)[][] = [...live.rounds];
   // Show the whole draw: empty slots for rounds not yet drawn.
-  while (rounds.length < 3) rounds.push(Array(4 >> rounds.length).fill(null));
+  while (rounds.length < names.length) rounds.push(Array(field >> (rounds.length + 1)).fill(null));
   return (
     <div className="bracket">
       {rounds.map((round, r) => (
         <div key={r} className="bracket-round">
-          <div className="field-label">{ROUND_NAMES[r]}</div>
+          <div className="field-label">{names[r]}</div>
           <div className="bracket-col">
             {round.map((m, k) => (
               <div key={k} className="bracket-match">

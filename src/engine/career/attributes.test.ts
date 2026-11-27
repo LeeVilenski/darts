@@ -151,25 +151,28 @@ describe('career XP from matches and training', () => {
   const stats = { darts: 15, points: 501, tons: 2, ton40s: 1, oneEighties: 1, bestCheckout: 41 };
 
   it('a career match banks XP into your attributes and reports it', async () => {
-    const { newCareer, recordResult } = await import('./career');
-    const c0 = newCareer('Sam', 3);
+    const { enterEvent, newCareer, recordResult, weekEvents } = await import('./career');
+    const n = newCareer('Sam', 3);
+    const c0 = enterEvent(n, weekEvents(n)[0]!.id);
     const c = recordResult(c0, true, [1, 0], { legs: [1, 0], stats, darts: Array(15).fill(t20) });
     expect(c.lastGain?.source).toBe('match');
     expect(c.lastGain!.player).toBeGreaterThan(0);
     expect(c.lastGain!.attrs.scoring).toBeGreaterThan(0);
-    expect(c.attributes!.ratings.scoring).toBeGreaterThan(c0.attributes!.ratings.scoring);
+    expect(c.attributes.ratings.scoring).toBeGreaterThan(c0.attributes.ratings.scoring);
   });
 
   it('one training session per event, focused on its attribute', async () => {
-    const { canTrain, newCareer, recordTraining, recordResult } = await import('./career');
+    const { canTrain, enterEvent, newCareer, recordTraining, recordResult, weekEvents } =
+      await import('./career');
     let c = newCareer('Sam', 3);
+    c = enterEvent(c, weekEvents(c)[0]!.id);
     expect(canTrain(c)).toBe(true);
     c = recordTraining(c, 'finishing', Array(30).fill(t20));
     expect(c.lastGain?.source).toBe('training');
     expect(c.lastGain!.attrs.finishing).toBeGreaterThan(c.lastGain!.attrs.nerve);
     expect(canTrain(c)).toBe(false);
     expect(recordTraining(c, 'finishing', [t20])).toBe(c);
-    // Knocked out: the event finishes and the next one can be trained for.
+    // Knocked out: the week ends and next week you can train again.
     c = recordResult(c, false, [0, 1]);
     expect(canTrain(c)).toBe(true);
   });

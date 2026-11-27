@@ -2,8 +2,7 @@ import { marksPerRound } from '../engine/modes/cricket';
 import type { MatchState } from '../engine/modes/match';
 import { playsSets } from '../engine/modes/types';
 import { threeDartAverage } from '../engine/modes/x01';
-import { nextMatch } from '../engine/career/career';
-import { ROUND_NAMES } from '../engine/career/tiers';
+import { describeReached, nextMatch } from '../engine/career/career';
 import { useCareer } from '../store/useCareer';
 import { GainStrip } from './career/Attributes';
 import { useGameStore } from '../store/useGameStore';
@@ -124,12 +123,13 @@ export function MatchOver({ match }: { match: MatchState }) {
     if (!career || !s.career) return null;
     if (training) return 'Training session done.';
     const next = nextMatch(s.career);
-    if (next)
-      return `Next: ${ROUND_NAMES[next.round]!.toLowerCase()} against ${next.opponent.name}`;
+    if (next) return `Next: ${next.roundName.toLowerCase()} against ${next.opponent.name}`;
     const last = s.career.results.at(-1);
-    return last
-      ? `${last.name} over: ${last.reached === 'W' ? 'champion!' : `out in the ${last.reached === 'F' ? 'final' : last.reached === 'SF' ? 'semi-finals' : 'quarter-finals'}`} (+${last.points} pts)`
-      : null;
+    if (!last) return null;
+    const reached = describeReached(last);
+    return `${last.name}: ${reached === 'Winner' ? 'champion!' : reached.toLowerCase()} (${
+      last.points ? `+${last.points} pts, ` : ''
+    }£${last.prize.toLocaleString('en-GB')})`;
   });
   const rows = statRows(match);
   if (playsSets(match.options)) rows.unshift(['Sets', (i) => match.players[i]!.setsWon]);

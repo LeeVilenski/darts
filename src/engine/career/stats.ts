@@ -6,7 +6,11 @@ export interface CareerMatchLog {
   tier: number;
   event: string;
   round: number;
+  /** "Quarter-final", "Last 32"... (older logs: missing). */
+  roundName?: string;
   opponent: string;
+  /** Opponent's name at the time (older logs: missing). */
+  opponentName?: string;
   won: boolean;
   /** Your legs/sets, then theirs. */
   score: [number, number];
@@ -51,6 +55,7 @@ export const emptyCareerStats = (): CareerStats => ({
 
 export interface MatchSummary {
   opponent: string;
+  opponentName?: string;
   won: boolean;
   /** Your legs/sets, then theirs. */
   score: [number, number];
@@ -65,7 +70,7 @@ const avg = (s: Pick<PlayerStats, 'darts' | 'points'>) => (s.darts ? (s.points /
 export function addMatch(
   prev: CareerStats,
   m: MatchSummary,
-  where: { season: number; tier: number; event: string; round: number },
+  where: { season: number; tier: number; event: string; round: number; roundName?: string },
 ): CareerStats {
   const average = avg(m.stats);
   const [w, l] = prev.h2h[m.opponent] ?? [0, 0];
@@ -83,7 +88,14 @@ export function addMatch(
     h2h: { ...prev.h2h, [m.opponent]: m.won ? [w + 1, l] : [w, l + 1] },
     log: [
       ...prev.log,
-      { ...where, opponent: m.opponent, won: m.won, score: m.score, average },
+      {
+        ...where,
+        opponent: m.opponent,
+        opponentName: m.opponentName,
+        won: m.won,
+        score: m.score,
+        average,
+      },
     ].slice(-LOG_SIZE),
   };
 }

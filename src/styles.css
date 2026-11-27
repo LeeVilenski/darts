@@ -1728,3 +1728,99 @@ input {
 .gain-strip .raised.gold {
   color: var(--gold);
 }
+
+/* ---------- career calendar v2 ---------- */
+.circuit-tag {
+  flex-shrink: 0;
+  min-width: 58px;
+  text-align: center;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  padding: 4px 6px;
+  border-radius: 6px;
+  color: #111;
+}
+.circuit-tag.pub {
+  background: #e0b66c;
+}
+.circuit-tag.county {
+  background: #4cc27a;
+}
+.circuit-tag.challenge {
+  background: #4fb3ff;
+}
+.circuit-tag.tour {
+  background: var(--gold);
+}
+.week-events {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.week-events li {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  border-radius: 10px;
+  background: rgba(0, 0, 0, 0.22);
+}
+.week-events li.locked {
+  opacity: 0.6;
+}
+.lock-reason {
+  font-size: 12px;
+  color: #ffb4a8;
+}
+.calendar.weeks .week {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--line);
+}
+.calendar.weeks .week.current .cal-num {
+  background: var(--c-accent);
+  color: var(--c-ink);
+}
+.calendar.weeks .week.done {
+  opacity: 0.8;
+}
+.week-list {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.cal-event.locked {
+  opacity: 0.55;
+}
+.card-badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 6px;
+}
+.goal b {
+  font-size: 15px;
+}
+.career-hub .segmented button.on {
+  background: var(--c-accent);
+  color: var(--c-ink);
+}
+.circuit-tag {
+  display: inline-block;
+  min-width: 0;
+  padding: 2px 6px;
+  font-size: 9px;
+}
+.cal-main > span:first-child {
+  line-height: 1;
+  margin-bottom: 2px;
+}

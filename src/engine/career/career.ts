@@ -1,6 +1,6 @@
 import { personalityFor } from '../ai/personality';
 import { planAiThrow } from '../ai/simulate';
-import type { AiLevel } from '../ai/skill';
+import { AI_LEVELS, type AiLevel } from '../ai/skill';
 import type { StuckDart } from '../board/collision';
 import { toDartScore } from '../modes/dart';
 import { withStarter } from '../modes/types';
@@ -10,7 +10,6 @@ import { createRng, type Rng } from '../rng';
 import {
   applyXp,
   ATTRS,
-  attributesForTier,
   matchXp,
   newAttributes,
   onTarget,
@@ -23,9 +22,25 @@ import {
   type PlayerAttributes,
   type Ratings,
 } from './attributes';
-import { AI_LEVELS } from '../ai/skill';
+import { drawBracket, nextRound, reachedRounds, type BracketMatch } from './bracket';
+import {
+  CIRCUIT_INFO,
+  CIRCUITS,
+  prizeShare,
+  QSCHOOL_FEE,
+  RANKING_SEASONS,
+  reachedLabel,
+  roundNames,
+  SEASON,
+  WEEKS_PER_SEASON,
+  type Card,
+  type CircuitId,
+  type EventTemplate,
+} from './circuits';
+import { quickMatch } from './quickSim';
 import { addMatch, emptyCareerStats, type CareerStats, type MatchSummary } from './stats';
-import { EVENTS_PER_SEASON, PRIZE_SHARE, PROMOTION_PLACES, TIERS, type Reached } from './tiers';
+
+export type { BracketMatch } from './bracket';
 
 /** The player's id in brackets and standings. */
 export const YOU = 'you';
@@ -34,72 +49,58 @@ export interface CareerPlayer {
   id: string;
   name: string;
   level: AiLevel;
-  tier: number;
+  circuit: CircuitId;
 }
 
-export interface BracketMatch {
-  a: string;
-  b: string;
-  winner: string | null;
-  /** Legs (or sets) won by a and b. */
-  score: [number, number] | null;
+/** An event on this season's calendar. */
+export interface CalEvent extends EventTemplate {
+  id: string;
+  /** Filled in once the event has been played. */
+  result: { winner: string; runnerUp: string } | null;
 }
 
-export interface CareerEvent {
-  name: string;
-  tier: number;
-  /** rounds[0]: 4 quarter-finals, [1]: 2 semis, [2]: the final. */
+/** The draw of an event in progress (or just finished). */
+export interface LiveEvent {
+  id: string;
   rounds: BracketMatch[][];
 }
 
 export interface EventResult {
   season: number;
-  tier: number;
+  week: number;
+  id: string;
   name: string;
-  reached: Reached;
+  circuit: CircuitId;
+  kind: EventTemplate['kind'];
+  field: number;
+  /** Round you went out in; equal to the number of rounds if you won. */
+  round: number;
   points: number;
   prize: number;
 }
 
 export interface Trophy {
   season: number;
-  tier: number;
   name: string;
+  circuit: CircuitId;
+  /** Stage (0 pub … 3 tour) for the cabinet's look. */
+  tier: number;
 }
 
 export interface SeasonSummary {
   season: number;
-  tier: number;
-  position: number;
+  /** Your finishing place on each circuit you scored on. */
+  places: { circuit: CircuitId; position: number; of: number }[];
+  /** What changed: "County card earned", "Tour card lost"... */
+  changes: string[];
   promoted: boolean;
 }
 
-export interface CareerState {
-  version: 1;
-  seed: number;
-  /** Your name. */
-  you: string;
-  tier: number;
-  season: number;
-  /** Event of the season being played (0-based). */
-  eventIndex: number;
-  roster: CareerPlayer[];
-  /** Order-of-merit points this season, by player id (YOU included). */
-  merit: Record<string, number>;
-  event: CareerEvent;
-  results: EventResult[];
-  trophies: Trophy[];
-  earnings: number;
-  /** Set when a season has just ended, until the player dismisses it. */
-  lastSeason: SeasonSummary | null;
-  /** Your record across career matches (missing in saves from before it was added). */
-  stats?: CareerStats;
-  /** Your throwing attributes (filled in on load for older saves). */
-  attributes?: PlayerAttributes;
-  /** XP from your last match or training session, for the post-match screen. */
-  lastGain?: GainReport | null;
-  /** Event you've already trained before (one session per event). */
-  trainedFor?: string | null;
+export interface Cards {
+  county: boolean;
+  challenge: boolean;
+  /** Last season your tour card is valid for, or null. */
+  tour: number | null;
 }
 
 export interface GainReport {
@@ -108,6 +109,44 @@ export interface GainReport {
   attrs: Ratings;
   raised: AttributeChange['raised'];
   levelsGained: number;
+}
+
+export interface CareerState {
+  version: 2;
+  seed: number;
+  /** Your name. */
+  you: string;
+  season: number;
+  /** 1-based week of the season. */
+  week: number;
+  cards: Cards;
+  /** Your stage: 0 pub, 1 county, 2 challenge, 3 tour (from your cards). */
+  tier: number;
+  roster: CareerPlayer[];
+  calendar: CalEvent[];
+  /** The event you're playing this week. */
+  event: LiveEvent | null;
+  /** The last event you played, to show its draw. */
+  lastEvent: LiveEvent | null;
+  /** Order-of-merit points this season by circuit, by player id (YOU included). */
+  merit: Record<CircuitId, Record<string, number>>;
+  /** Tour prize money by player and season (the tour ranking). */
+  money: Record<string, Record<number, number>>;
+  /** Events you have a place in regardless of the entry rule (wildcards, qualifiers). */
+  invites: string[];
+  /** A Q-School place for this season. */
+  qschoolPlace: boolean;
+  results: EventResult[];
+  trophies: Trophy[];
+  earnings: number;
+  /** Set when a season has just ended, until the player dismisses it. */
+  lastSeason: SeasonSummary | null;
+  stats: CareerStats;
+  attributes: PlayerAttributes;
+  /** XP from your last match or training session, for the post-match screen. */
+  lastGain: GainReport | null;
+  /** Week you've already trained in (one session per week). */
+  trainedFor: string | null;
 }
 
 // Fictional names only.
@@ -176,10 +215,16 @@ const NICKNAMES = [
   'Lucky',
   'The Professor',
   'Rocket',
+  'The Bishop',
+  'Thunder',
+  'The Miner',
+  'Snakebite',
+  'The Chef',
+  'Mr Smooth',
 ];
 
 /** Small integer hash mixing, for per-event seeds. */
-function mix(...xs: number[]): number {
+export function mix(...xs: number[]): number {
   let h = 0x9e3779b9;
   for (const x of xs) {
     h ^= x + 0x7f4a7c15 + (h << 6) + (h >>> 2);
@@ -187,6 +232,7 @@ function mix(...xs: number[]): number {
   }
   return h >>> 0;
 }
+const hashStr = (s: string) => [...s].reduce((h, ch) => mix(h, ch.charCodeAt(0)), 7);
 
 function shuffle<T>(xs: readonly T[], rng: Rng): T[] {
   const out = [...xs];
@@ -203,15 +249,17 @@ export function createRoster(seed: number): CareerPlayer[] {
   const lasts = shuffle(LAST, rng);
   const nicks = shuffle(NICKNAMES, rng);
   const roster: CareerPlayer[] = [];
-  TIERS.forEach((tier, t) =>
-    tier.levels.forEach((level, k) => {
-      const n = roster.length;
-      // The best players on the top tiers get a nickname.
-      const nick = t >= 2 && k >= 8 ? ` "${nicks[(n * 7) % nicks.length]}"` : '';
-      const name = `${firsts[n % firsts.length]}${nick} ${lasts[(n * 5 + Math.floor(n / 24)) % lasts.length]}`;
-      roster.push({ id: `p${n}`, name, level, tier: t });
-    }),
-  );
+  let nick = 0;
+  for (const circuit of CIRCUITS)
+    for (const [level, count] of CIRCUIT_INFO[circuit].levels)
+      for (let k = 0; k < count; k++) {
+        const n = roster.length;
+        // The best players on the tour have a nickname.
+        const named = level === 'pro' && nick < nicks.length && (circuit === 'tour' || k < 4);
+        const nickname = named ? ` "${nicks[nick++]}"` : '';
+        const name = `${firsts[n % 24]}${nickname} ${lasts[(n * 5 + Math.floor(n / 24)) % 24]}`;
+        roster.push({ id: `p${n}`, name, level, circuit });
+      }
   return roster;
 }
 
@@ -220,30 +268,42 @@ export function playerById(c: CareerState, id: string): CareerPlayer | null {
 }
 export const nameOf = (c: CareerState, id: string) =>
   id === YOU ? c.you : (playerById(c, id)?.name ?? id);
+const levelOf = (c: CareerState, id: string): AiLevel => playerById(c, id)?.level ?? 'club';
 
-function drawEvent(c: Omit<CareerState, 'event'>): CareerEvent {
-  const rng = createRng(mix(c.seed, c.season, c.tier, c.eventIndex, 2));
-  const regulars = c.roster.filter((p) => p.tier === c.tier).map((p) => p.id);
-  const field = shuffle([YOU, ...shuffle(regulars, rng).slice(0, 7)], rng);
-  const qf: BracketMatch[] = [0, 2, 4, 6].map((k) => ({
-    a: field[k]!,
-    b: field[k + 1]!,
-    winner: null,
-    score: null,
-  }));
-  return { name: TIERS[c.tier]!.events[c.eventIndex]!, tier: c.tier, rounds: [qf] };
+export const eventById = (c: CareerState, id: string) => c.calendar.find((e) => e.id === id);
+export const weekEvents = (c: CareerState, week = c.week) =>
+  c.calendar.filter((e) => e.week === week);
+
+export function buildCalendar(season: number): CalEvent[] {
+  return SEASON.map((t) => ({ ...t, id: `s${season}-${t.slug}`, result: null }));
+}
+
+const emptyMerit = (): CareerState['merit'] => ({ pub: {}, county: {}, challenge: {}, tour: {} });
+
+export function stageOf(cards: Cards, season: number): number {
+  if (cards.tour !== null && cards.tour >= season) return 3;
+  if (cards.challenge) return 2;
+  if (cards.county) return 1;
+  return 0;
 }
 
 export function newCareer(you: string, seed: number): CareerState {
-  const base = {
-    version: 1 as const,
+  return {
+    version: 2,
     seed: seed >>> 0,
     you: you.trim() || 'Player 1',
-    tier: 0,
     season: 1,
-    eventIndex: 0,
+    week: 1,
+    cards: { county: false, challenge: false, tour: null },
+    tier: 0,
     roster: createRoster(seed),
-    merit: {},
+    calendar: buildCalendar(1),
+    event: null,
+    lastEvent: null,
+    merit: emptyMerit(),
+    money: {},
+    invites: [],
+    qschoolPlace: false,
     results: [],
     trophies: [],
     earnings: 0,
@@ -253,25 +313,213 @@ export function newCareer(you: string, seed: number): CareerState {
     lastGain: null,
     trainedFor: null,
   };
-  return { ...base, event: drawEvent(base) };
 }
 
+/* ------------------------------------------------------------------ rankings */
+
+/** Tour prize money over the ranking window, by player. */
+export function rankingMoney(c: CareerState, id: string): number {
+  const m = c.money[id];
+  if (!m) return 0;
+  let sum = 0;
+  for (let s = c.season - RANKING_SEASONS + 1; s <= c.season; s++) sum += m[s] ?? 0;
+  return sum;
+}
+
+/** The tour ranking: tour regulars, plus you if you've earned tour money or hold a card. */
+export function tourRanking(c: CareerState): { id: string; name: string; money: number }[] {
+  const ids = c.roster.filter((p) => p.circuit === 'tour').map((p) => p.id);
+  if (c.cards.tour !== null || rankingMoney(c, YOU) > 0) ids.push(YOU);
+  return ids
+    .map((id) => ({ id, name: nameOf(c, id), money: rankingMoney(c, id) }))
+    .sort(
+      (a, b) =>
+        b.money - a.money ||
+        AI_LEVELS.indexOf(levelOf(c, b.id)) - AI_LEVELS.indexOf(levelOf(c, a.id)) ||
+        a.id.localeCompare(b.id),
+    );
+}
+export const tourPosition = (c: CareerState, id = YOU) =>
+  tourRanking(c).findIndex((r) => r.id === id) + 1 || null;
+
+/** A circuit's order of merit this season, best first (you included if you've scored or play it). */
+export function standings(
+  c: CareerState,
+  circuit: CircuitId = (['pub', 'county', 'challenge', 'tour'] as const)[Math.min(c.tier, 2)]!,
+): { id: string; name: string; points: number }[] {
+  if (circuit === 'tour')
+    return tourRanking(c).map((r) => ({ id: r.id, name: r.name, points: r.money }));
+  const merit = c.merit[circuit];
+  const ids = c.roster.filter((p) => p.circuit === circuit).map((p) => p.id);
+  if (merit[YOU] !== undefined || canPlayCircuit(c, circuit)) ids.push(YOU);
+  return ids
+    .map((id) => ({ id, name: nameOf(c, id), points: merit[id] ?? 0 }))
+    .sort((a, b) => b.points - a.points || (a.id === YOU ? -1 : b.id === YOU ? 1 : 0));
+}
+
+const canPlayCircuit = (c: CareerState, circuit: CircuitId) =>
+  circuit === 'pub' ||
+  (circuit === 'county' && c.cards.county) ||
+  (circuit === 'challenge' && c.cards.challenge);
+
+/* ------------------------------------------------------------------ entry */
+
+export type Eligibility = { ok: true; via?: 'invite' | 'fee' } | { ok: false; reason: string };
+
+export function holdsCard(c: CareerState, card: Card): boolean {
+  return card === 'tour' ? c.cards.tour !== null && c.cards.tour >= c.season : c.cards[card];
+}
+
+const CARD_NAMES: Record<Card, string> = {
+  county: 'a County card',
+  challenge: 'a Challenge Tour card',
+  tour: 'a Tour Card',
+};
+
+/** Can you enter this event, and if not, why not. */
+export function eligibility(c: CareerState, e: CalEvent): Eligibility {
+  if (e.result) return { ok: false, reason: 'Already played' };
+  if (c.invites.includes(e.id)) return { ok: true, via: 'invite' };
+  const entry = e.entry;
+  switch (entry.kind) {
+    case 'open':
+      // Pros don't go back to the pub.
+      return c.tier >= 2 && e.circuit === 'pub'
+        ? { ok: false, reason: 'Pub events are for amateurs' }
+        : { ok: true };
+    case 'card':
+      return holdsCard(c, entry.card)
+        ? { ok: true }
+        : { ok: false, reason: `Needs ${CARD_NAMES[entry.card]}` };
+    case 'meritTop': {
+      if (entry.card && !holdsCard(c, entry.card))
+        return { ok: false, reason: `Needs ${CARD_NAMES[entry.card]}` };
+      const pos = standings(c, entry.circuit).findIndex((s) => s.id === YOU) + 1;
+      return pos > 0 && pos <= entry.top
+        ? { ok: true }
+        : {
+            ok: false,
+            reason: `Top ${entry.top} of the ${CIRCUIT_INFO[entry.circuit].name}${pos ? ` (you're ${ordinal(pos)})` : ''}`,
+          };
+    }
+    case 'rankingTop': {
+      const pos = tourPosition(c);
+      if (holdsCard(c, 'tour') && pos !== null && pos <= entry.top) return { ok: true };
+      return {
+        ok: false,
+        reason: `Top ${entry.top} on the tour ranking${pos ? ` (you're ${ordinal(pos)})` : ''}, or reach the qualifier final`,
+      };
+    }
+    case 'qschool':
+      if (holdsCard(c, 'tour')) return { ok: false, reason: 'You already hold a Tour Card' };
+      if (c.qschoolPlace) return { ok: true };
+      if (!c.cards.county) return { ok: false, reason: 'Needs a Q-School place or a County card' };
+      return c.earnings >= QSCHOOL_FEE
+        ? { ok: true, via: 'fee' }
+        : { ok: false, reason: `Entry fee £${QSCHOOL_FEE} (you have £${c.earnings})` };
+  }
+}
+
+export const ordinal = (n: number) => {
+  const t = n % 100;
+  const s = t >= 11 && t <= 13 ? 'th' : (['th', 'st', 'nd', 'rd'][n % 10] ?? 'th');
+  return `${n}${s}`;
+};
+
+/* ------------------------------------------------------------------ fields */
+
+/** Seeding score: merit on the circuit, or tour money. */
+function seedScore(c: CareerState, e: CalEvent, id: string): number {
+  return e.circuit === 'tour' ? rankingMoney(c, id) : (c.merit[e.circuit][id] ?? 0);
+}
+
+/** AI players who enter an event, best seeds first (one slot left for you if `withYou`). */
+function fieldFor(c: CareerState, e: CalEvent, withYou: boolean): string[] {
+  const rng = createRng(mix(c.seed, c.season, hashStr(e.id), 11));
+  const size = e.field - (withYou ? 1 : 0);
+  const of = (circuit: CircuitId) => c.roster.filter((p) => p.circuit === circuit).map((p) => p.id);
+  let pool: string[];
+  const entry = e.entry;
+  if (entry.kind === 'meritTop')
+    pool = standings(c, entry.circuit)
+      .filter((s) => s.id !== YOU)
+      .map((s) => s.id);
+  else if (entry.kind === 'rankingTop') {
+    const ranked = tourRanking(c)
+      .filter((r) => r.id !== YOU)
+      .map((r) => r.id);
+    const q = entry.qualifier ? eventById(c, `s${c.season}-${entry.qualifier}`)?.result : null;
+    const qualified = q ? [q.winner, q.runnerUp].filter((id) => id !== YOU) : [];
+    pool = [...new Set([...ranked.slice(0, entry.top), ...qualified, ...ranked.slice(entry.top)])];
+  } else if (e.kind === 'qualifier') {
+    // Card holders outside the major's automatic places.
+    const major = SEASON.find((t) => t.slug === e.feeds);
+    const top = major?.entry.kind === 'rankingTop' ? major.entry.top : 0;
+    pool = shuffle(
+      tourRanking(c)
+        .slice(top)
+        .filter((r) => r.id !== YOU)
+        .map((r) => r.id),
+      rng,
+    );
+  } else if (e.kind === 'qschool')
+    pool = shuffle([...of('challenge'), ...of('county').slice(0, 12)], rng);
+  else pool = shuffle(of(e.circuit), rng);
+  const picked = pool.slice(0, size);
+  return picked.sort((a, b) => seedScore(c, e, b) - seedScore(c, e, a));
+}
+
+/** Seed you into a field by your own score. */
+function withYouSeeded(c: CareerState, e: CalEvent, field: string[]): string[] {
+  const mine = seedScore(c, e, YOU);
+  const at = field.findIndex((id) => seedScore(c, e, id) < mine);
+  const out = [...field];
+  out.splice(at < 0 ? out.length : at, 0, YOU);
+  return out;
+}
+
+/* ------------------------------------------------------------------ playing */
+
 export interface NextMatch {
+  event: CalEvent;
   round: number;
+  roundName: string;
   opponent: CareerPlayer;
   format: X01Options;
 }
 
-/** Your next match in the current event, or null if you're out. */
+/** Your next match in the event you've entered, or null. */
 export function nextMatch(c: CareerState): NextMatch | null {
+  if (!c.event) return null;
+  const event = eventById(c, c.event.id)!;
   const round = c.event.rounds.length - 1;
   const m = c.event.rounds[round]!.find((x) => x.winner === null && (x.a === YOU || x.b === YOU));
   if (!m) return null;
-  const opponent = playerById(c, m.a === YOU ? m.b : m.a)!;
-  return { round, opponent, format: TIERS[c.tier]!.formats[round]! };
+  return {
+    event,
+    round,
+    roundName: roundNames(event.field)[round]!,
+    opponent: playerById(c, m.a === YOU ? m.b : m.a)!,
+    format: event.formats[round]!,
+  };
 }
 
-/** Play an AI-vs-AI x01 match headlessly through the real physics. */
+/** Enter one of this week's events. */
+export function enterEvent(c: CareerState, id: string): CareerState {
+  const e = eventById(c, id);
+  if (!e || c.event || e.week !== c.week) return c;
+  const ok = eligibility(c, e);
+  if (!ok.ok) return c;
+  const field = withYouSeeded(c, e, fieldFor(c, e, true));
+  return {
+    ...c,
+    earnings: ok.via === 'fee' ? c.earnings - (e.fee ?? 0) : c.earnings,
+    invites: c.invites.filter((x) => x !== id),
+    event: { id, rounds: [drawBracket(field)] },
+  };
+}
+
+/** Play an AI-vs-AI x01 match headlessly through the real physics (slow; for tests and tools). */
 export function simulateMatch(
   players: [CareerPlayer, CareerPlayer],
   options: X01Options,
@@ -306,109 +554,155 @@ export function simulateMatch(
   return { winner, score: [tally(m.players[0]!), tally(m.players[1]!)] };
 }
 
-/** Simulate every unplayed AI-only match of the current round. */
-function simulateRound(c: CareerState): CareerState {
-  const r = c.event.rounds.length - 1;
-  const rng = createRng(mix(c.seed, c.season, c.tier, c.eventIndex, 3, r));
-  const format = TIERS[c.tier]!.formats[r]!;
-  const round = c.event.rounds[r]!.map((m) => {
+/** Simulate every unplayed AI-only match of the last round. */
+function simulateRound(c: CareerState, e: CalEvent, rounds: BracketMatch[][]): BracketMatch[][] {
+  const r = rounds.length - 1;
+  const rng = createRng(mix(c.seed, c.season, hashStr(e.id), 3, r));
+  const format = e.formats[r]!;
+  const round = rounds[r]!.map((m) => {
     if (m.winner !== null || m.a === YOU || m.b === YOU) return m;
-    const pair: [CareerPlayer, CareerPlayer] = [playerById(c, m.a)!, playerById(c, m.b)!];
-    const { winner, score } = simulateMatch(pair, format, rng);
+    const { winner, score } = quickMatch(levelOf(c, m.a), levelOf(c, m.b), format, rng);
     return { ...m, winner: winner === 0 ? m.a : m.b, score };
   });
-  return { ...c, event: { ...c.event, rounds: [...c.event.rounds.slice(0, r), round] } };
+  return [...rounds.slice(0, r), round];
 }
 
-/** All matches of the round done: draw the next one, or finish the event. */
-function advance(c: CareerState): CareerState {
-  const rounds = c.event.rounds;
-  const last = rounds[rounds.length - 1]!;
-  if (last.some((m) => m.winner === null)) return c;
-  if (last.length === 1) return finishEvent(c);
-  const next: BracketMatch[] = [];
-  for (let k = 0; k < last.length; k += 2)
-    next.push({ a: last[k]!.winner!, b: last[k + 1]!.winner!, winner: null, score: null });
-  const c2 = { ...c, event: { ...c.event, rounds: [...rounds, next] } };
-  // Out of the event: play the rest out.
-  return nextMatch(c2) ? c2 : advance(simulateRound(c2));
+/** Play rounds out (without you) until you have a match to play or the event is over. */
+function playOn(c: CareerState, e: CalEvent, rounds: BracketMatch[][]): BracketMatch[][] {
+  for (;;) {
+    rounds = simulateRound(c, e, rounds);
+    const last = rounds.at(-1)!;
+    if (last.some((m) => m.winner === null) || last.length === 1) return rounds;
+    rounds = [...rounds, nextRound(last)];
+    if (rounds.at(-1)!.some((m) => m.a === YOU || m.b === YOU)) return rounds;
+  }
 }
 
-/** How far each player got in a finished event. */
-function reachedIn(e: CareerEvent): Record<string, Reached> {
-  const out: Record<string, Reached> = {};
-  const stage: Reached[] = ['QF', 'SF', 'F'];
-  e.rounds.forEach((round, r) =>
-    round.forEach((m) => {
-      out[m.a] = stage[r]!;
-      out[m.b] = stage[r]!;
-    }),
-  );
-  out[e.rounds[2]![0]!.winner!] = 'W';
-  return out;
-}
+const isOver = (rounds: BracketMatch[][]) => {
+  const last = rounds.at(-1)!;
+  return last.length === 1 && last[0]!.winner !== null;
+};
 
-function finishEvent(c: CareerState): CareerState {
-  const tier = TIERS[c.tier]!;
-  const reached = reachedIn(c.event);
-  const merit = { ...c.merit };
-  for (const [id, r] of Object.entries(reached)) merit[id] = (merit[id] ?? 0) + tier.points[r];
-  const mine = reached[YOU]!;
-  const prize = Math.round(tier.prize * PRIZE_SHARE[mine]);
-  const result: EventResult = {
-    season: c.season,
-    tier: c.tier,
-    name: c.event.name,
-    reached: mine,
-    points: tier.points[mine],
-    prize,
-  };
+/** Award points, prize money, trophies and spots from a finished event. */
+function settleEvent(c: CareerState, e: CalEvent, rounds: BracketMatch[][]): CareerState {
+  const reached = reachedRounds(rounds);
+  const nRounds = rounds.length;
+  const final = rounds.at(-1)![0]!;
+  const winner = final.winner!;
+  const runnerUp = final.a === winner ? final.b : final.a;
+  const pts = CIRCUIT_INFO[e.circuit].points(e.field);
+  const merit = { ...c.merit, [e.circuit]: { ...c.merit[e.circuit] } };
+  const money = { ...c.money };
+  for (const [id, r] of Object.entries(reached)) {
+    if (e.circuit !== 'tour' && e.kind !== 'qschool')
+      merit[e.circuit][id] = (merit[e.circuit][id] ?? 0) + (pts[r] ?? 0);
+    const prize = Math.round(e.prize * prizeShare(nRounds, r));
+    if (e.circuit === 'tour' && prize > 0)
+      money[id] = { ...money[id], [c.season]: (money[id]?.[c.season] ?? 0) + prize };
+  }
   let next: CareerState = {
     ...c,
     merit,
-    results: [...c.results, result],
-    trophies:
-      mine === 'W'
-        ? [...c.trophies, { season: c.season, tier: c.tier, name: c.event.name }]
-        : c.trophies,
-    earnings: c.earnings + prize,
-    eventIndex: c.eventIndex + 1,
+    money,
+    calendar: c.calendar.map((x) => (x.id === e.id ? { ...x, result: { winner, runnerUp } } : x)),
   };
-  if (next.eventIndex >= EVENTS_PER_SEASON) next = endSeason(next);
-  return { ...next, event: drawEvent(next) };
+  const mine = reached[YOU];
+  if (mine !== undefined) {
+    const prize = Math.round(e.prize * prizeShare(nRounds, mine));
+    next = {
+      ...next,
+      results: [
+        ...next.results,
+        {
+          season: c.season,
+          week: e.week,
+          id: e.id,
+          name: e.name,
+          circuit: e.circuit,
+          kind: e.kind,
+          field: e.field,
+          round: mine,
+          points: e.circuit === 'tour' || e.kind === 'qschool' ? 0 : (pts[mine] ?? 0),
+          prize,
+        },
+      ],
+      trophies:
+        mine === nRounds && e.kind !== 'qualifier' && e.kind !== 'qschool'
+          ? [
+              ...next.trophies,
+              {
+                season: c.season,
+                name: e.name,
+                circuit: e.circuit,
+                tier: CIRCUIT_INFO[e.circuit].stage,
+              },
+            ]
+          : next.trophies,
+      earnings: next.earnings + prize,
+    };
+    // A qualifier's finalists go through to the major.
+    if (e.kind === 'qualifier' && e.feeds && mine >= nRounds - 1)
+      next = { ...next, invites: [...next.invites, `s${c.season}-${e.feeds}`] };
+    if (e.kind === 'qschool') next = qschoolOutcome(next, mine, nRounds);
+  }
+  return next;
 }
 
-/** Order of merit for the current tier, best first. */
-export function standings(c: CareerState): { id: string; name: string; points: number }[] {
-  const ids = [YOU, ...c.roster.filter((p) => p.tier === c.tier).map((p) => p.id)];
-  return ids
-    .map((id) => ({ id, name: nameOf(c, id), points: c.merit[id] ?? 0 }))
-    .sort((a, b) => b.points - a.points || (a.id === YOU ? -1 : b.id === YOU ? 1 : 0));
+/** Q-School: the semi-finalists win a Tour Card, the quarter-finalists a Challenge Tour card. */
+export const QSCHOOL_TOUR_FROM = 2; // rounds from the end: SF
+function qschoolOutcome(c: CareerState, round: number, nRounds: number): CareerState {
+  const fromEnd = nRounds - round;
+  if (fromEnd <= QSCHOOL_TOUR_FROM) return grantCard(c, 'tour');
+  if (fromEnd === QSCHOOL_TOUR_FROM + 1) return grantCard(c, 'challenge');
+  return c;
 }
 
-function endSeason(c: CareerState): CareerState {
-  const position = standings(c).findIndex((s) => s.id === YOU) + 1;
-  const top = c.tier === TIERS.length - 1;
-  const promoted = !top && position <= PROMOTION_PLACES;
-  const trophies =
-    position === 1
-      ? [
-          ...c.trophies,
-          { season: c.season, tier: c.tier, name: `${TIERS[c.tier]!.name} Order of Merit` },
-        ]
-      : c.trophies;
-  const tier = promoted ? c.tier + 1 : c.tier;
-  return {
-    ...c,
-    attributes: c.attributes && promoted ? recheck(c.attributes, tier).attrs : c.attributes,
-    trophies,
-    lastSeason: { season: c.season, tier: c.tier, position, promoted },
-    season: c.season + 1,
-    tier,
-    eventIndex: 0,
-    merit: {},
-  };
+/** Give you a card (and raise your attribute ceiling to match). */
+export function grantCard(c: CareerState, card: Card): CareerState {
+  const cards: Cards =
+    card === 'tour'
+      ? // Valid for the coming season and the one after.
+        { ...c.cards, county: true, challenge: true, tour: c.season + 2 }
+      : card === 'challenge'
+        ? { ...c.cards, county: true, challenge: true }
+        : { ...c.cards, county: true };
+  return restage({ ...c, cards });
 }
+
+function restage(c: CareerState): CareerState {
+  const tier = Math.max(c.tier, stageOf(c.cards, c.season));
+  return tier === c.tier ? c : { ...c, tier, attributes: recheck(c.attributes, tier).attrs };
+}
+
+/** Simulate a whole event without you. */
+function simulateEvent(c: CareerState, e: CalEvent): CareerState {
+  const rounds = playOn(c, e, [drawBracket(fieldFor(c, e, false))]);
+  return settleEvent(c, e, rounds);
+}
+
+/** Your event is over: settle it and move on. */
+function finishYourEvent(c: CareerState, rounds: BracketMatch[][]): CareerState {
+  const e = eventById(c, c.event!.id)!;
+  while (!isOver(rounds)) {
+    rounds = playOn(c, e, rounds);
+    if (!isOver(rounds) && rounds.at(-1)!.every((m) => m.winner !== null))
+      rounds = [...rounds, nextRound(rounds.at(-1)!)];
+  }
+  const settled = settleEvent(c, e, rounds);
+  return finishWeek({ ...settled, event: null, lastEvent: { id: e.id, rounds } });
+}
+
+/** Play out the rest of the week's events and move to the next week (or season). */
+export function finishWeek(c: CareerState): CareerState {
+  if (c.event) return c;
+  let next = c;
+  for (const e of weekEvents(c)) if (!e.result) next = simulateEvent(next, eventById(next, e.id)!);
+  next = { ...next, week: next.week + 1 };
+  return next.week > WEEKS_PER_SEASON ? endSeason(next) : next;
+}
+
+/** Skip this week: no event for you. */
+export const skipWeek = (c: CareerState) => (c.event ? c : finishWeek(c));
 
 /**
  * Record your match (won or lost, with your legs/sets and theirs), then play
@@ -425,7 +719,7 @@ export function recordResult(
   },
 ): CareerState {
   const next = nextMatch(c);
-  if (!next) return c;
+  if (!next || !c.event) return c;
   const r = next.round;
   if (summary?.darts) {
     const attrs = xpFromDarts(summary.darts);
@@ -442,20 +736,85 @@ export function recordResult(
     c = {
       ...c,
       stats: addMatch(
-        c.stats ?? emptyCareerStats(),
-        { ...summary, opponent: next.opponent.id, won, score },
-        { season: c.season, tier: c.tier, event: c.event.name, round: r },
+        c.stats,
+        { ...summary, opponent: next.opponent.id, opponentName: next.opponent.name, won, score },
+        {
+          season: c.season,
+          tier: c.tier,
+          event: next.event.name,
+          round: r,
+          roundName: next.roundName,
+        },
       ),
     };
-  const round = c.event.rounds[r]!.map((m) => {
+  const round = c.event!.rounds[r]!.map((m) => {
     if (m.winner !== null || (m.a !== YOU && m.b !== YOU)) return m;
     const youA = m.a === YOU;
     const winner = won ? YOU : youA ? m.b : m.a;
     return { ...m, winner, score: (youA ? score : [score[1], score[0]]) as [number, number] };
   });
-  const c2 = { ...c, event: { ...c.event, rounds: [...c.event.rounds.slice(0, r), round] } };
-  return advance(simulateRound(c2));
+  let rounds = [...c.event!.rounds.slice(0, r), round];
+  if (won && !isOver(rounds)) {
+    rounds = playOn(c, next.event, rounds);
+    if (!isOver(rounds) && rounds.at(-1)!.every((m) => m.winner !== null))
+      rounds = playOn(c, next.event, [...rounds, nextRound(rounds.at(-1)!)]);
+  }
+  const stillIn = won && !isOver(rounds);
+  return stillIn ? { ...c, event: { ...c.event!, rounds } } : finishYourEvent(c, rounds);
 }
+
+/* ------------------------------------------------------------------ seasons */
+
+/** Interim promotion rule: the top 2 of a circuit's merit earn the next card. */
+export const PROMOTION_PLACES = 2;
+const NEXT_CARD: Partial<Record<CircuitId, Card>> = {
+  pub: 'county',
+  county: 'challenge',
+  challenge: 'tour',
+};
+
+function endSeason(c: CareerState): CareerState {
+  const places: SeasonSummary['places'] = [];
+  const changes: string[] = [];
+  let next = c;
+  const trophies = [...c.trophies];
+  for (const circuit of ['pub', 'county', 'challenge'] as const) {
+    if (c.merit[circuit][YOU] === undefined) continue;
+    const table = standings(c, circuit);
+    const position = table.findIndex((s) => s.id === YOU) + 1;
+    places.push({ circuit, position, of: table.length });
+    if (position === 1)
+      trophies.push({
+        season: c.season,
+        name: `${CIRCUIT_INFO[circuit].name} Order of Merit`,
+        circuit,
+        tier: CIRCUIT_INFO[circuit].stage,
+      });
+    const card = NEXT_CARD[circuit];
+    if (card && position <= PROMOTION_PLACES && !holdsCard(next, card)) {
+      next = grantCard(next, card);
+      changes.push(`${cap(CARD_NAMES[card].replace(/^an? /, ''))} earned`);
+    }
+  }
+  const before = c.tier;
+  const season = c.season + 1;
+  next = { ...next, trophies };
+  return {
+    ...next,
+    season,
+    week: 1,
+    calendar: buildCalendar(season),
+    merit: emptyMerit(),
+    invites: [],
+    qschoolPlace: false,
+    lastSeason: { season: c.season, places, changes, promoted: next.tier > before },
+  };
+}
+const cap = (s: string) => s[0]!.toUpperCase() + s.slice(1);
+
+export const dismissSeason = (c: CareerState): CareerState => ({ ...c, lastSeason: null });
+
+/* ------------------------------------------------------------------ XP and training */
 
 /** Bank XP into your attributes and remember it for the post-match screen. */
 function gainXp(
@@ -463,8 +822,7 @@ function gainXp(
   source: GainReport['source'],
   gain: { attrs: Ratings; player: number },
 ): CareerState {
-  const before = c.attributes ?? attributesForTier(c.tier);
-  const change = applyXp(before, gain, c.tier);
+  const change = applyXp(c.attributes, gain, c.tier);
   return {
     ...c,
     attributes: change.attrs,
@@ -478,7 +836,7 @@ function gainXp(
   };
 }
 
-/** Training drills between events: each works one attribute hardest. */
+/** Training drills: each works one attribute hardest. */
 export const DRILLS: Record<Attr, { mode: 'atc' | 'bobs27' | 'ladder' | 'halveit'; name: string }> =
   {
     scoring: { mode: 'atc', name: 'Around the Clock' },
@@ -487,9 +845,9 @@ export const DRILLS: Record<Attr, { mode: 'atc' | 'bobs27' | 'ladder' | 'halveit
     rhythm: { mode: 'halveit', name: 'Halve-It' },
   };
 
-/** Key of the event you're about to play, for the one-session-per-event training rule. */
-export const eventKey = (c: CareerState) => `${c.season}:${c.tier}:${c.eventIndex}`;
-export const canTrain = (c: CareerState) => c.trainedFor !== eventKey(c) && !!nextMatch(c);
+/** One training session per week. */
+export const weekKey = (c: CareerState) => `${c.season}:${c.week}`;
+export const canTrain = (c: CareerState) => c.trainedFor !== weekKey(c);
 
 /** Record a finished training session. `bonus` is drill-specific (e.g. 121 checkouts). */
 export function recordTraining(
@@ -506,49 +864,15 @@ export function recordTraining(
   attrs[focus] = raw[focus] * 0.8 + hits + bonus;
   return {
     ...gainXp(c, 'training', { attrs, player: 10 + Math.round(darts.length / 6) }),
-    trainedFor: eventKey(c),
+    trainedFor: weekKey(c),
   };
 }
 
-export type ScheduleStatus = 'done' | 'current' | 'upcoming';
+/* ------------------------------------------------------------------ views */
 
-/** This season's events in order, with your result for the ones played. */
-export function seasonSchedule(
-  c: CareerState,
-): { index: number; name: string; status: ScheduleStatus; result: EventResult | null }[] {
-  const played = c.results.filter((r) => r.season === c.season && r.tier === c.tier);
-  return TIERS[c.tier]!.events.map((name, index) => ({
-    index,
-    name,
-    status: index < c.eventIndex ? 'done' : index === c.eventIndex ? 'current' : 'upcoming',
-    result: index < c.eventIndex ? (played[index] ?? null) : null,
-  }));
+/** How you did in an event (for the calendar). */
+export function resultFor(c: CareerState, id: string): EventResult | null {
+  return c.results.find((r) => r.id === id) ?? null;
 }
 
-/** Where you stand in the promotion race. */
-export function promotionRace(c: CareerState): {
-  position: number;
-  points: number;
-  /** Points behind the last promotion place (0 if you're in one). */
-  gap: number;
-  eventsLeft: number;
-  /** Most points still available to you this season. */
-  maxToCome: number;
-  top: boolean;
-} {
-  const table = standings(c);
-  const position = table.findIndex((s) => s.id === YOU) + 1;
-  const points = c.merit[YOU] ?? 0;
-  const line = table.filter((s) => s.id !== YOU)[PROMOTION_PLACES - 1]?.points ?? 0;
-  const eventsLeft = EVENTS_PER_SEASON - c.eventIndex;
-  return {
-    position,
-    points,
-    gap: position <= PROMOTION_PLACES ? 0 : Math.max(0, line - points),
-    eventsLeft,
-    maxToCome: eventsLeft * TIERS[c.tier]!.points.W,
-    top: c.tier === TIERS.length - 1,
-  };
-}
-
-export const dismissSeason = (c: CareerState): CareerState => ({ ...c, lastSeason: null });
+export const describeReached = (r: EventResult) => reachedLabel(r.field, r.round);
