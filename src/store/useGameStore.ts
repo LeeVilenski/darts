@@ -109,6 +109,8 @@ export interface Settings {
   throwControl: 'flick' | 'meter';
   /** Board colours: classic red/green, or a colour-blind-safe blue/orange. */
   palette: 'classic' | 'contrast';
+  /** Pressure sway: your aim wanders on big darts (leg and match darts, missed doubles). */
+  nerves: boolean;
 }
 
 interface GameState extends Settings {
@@ -155,6 +157,7 @@ export const SETTING_KEYS: (keyof Settings)[] = [
   'quality',
   'throwControl',
   'palette',
+  'nerves',
 ];
 const SETUP_KEY = 'darts.setup.v1';
 
@@ -194,6 +197,7 @@ function loadSettings(): Settings {
     quality: 'auto',
     throwControl: 'flick',
     palette: 'classic',
+    nerves: true,
   };
   return { ...fallback, ...readJson<Settings>(SETTINGS_KEY) };
 }
@@ -292,7 +296,10 @@ export const useGameStore = create<GameState>((set, get) => ({
     const s = get();
     const full = s.bullUp ? bullUpThrower(s.bullUp) === null : s.darts.length >= DARTS_PER_TURN;
     if (s.phase !== 'aiming' || full || currentAi(s)) return;
-    launchDart(aim, computeLaunch(aim, flick, s.assist, rng));
+    // Under pressure the aim sways: the dart goes where it is at the moment of release.
+    const off = aimSway?.() ?? { x: 0, y: 0 };
+    const swayed = { x: aim.x + off.x, y: aim.y + off.y };
+    launchDart(swayed, computeLaunch(swayed, flick, s.assist, rng));
   },
 
   aiThrow() {
@@ -438,6 +445,12 @@ function launchDart(aim: { x: number; y: number }, launch: LaunchParams) {
     aim,
     darts: [...s.darts, { id: nextId++, launch, flight, result, collision, landed: false }],
   });
+}
+
+/** Live pressure-sway offset (board mm) for the player's aim, set by the game layer. */
+let aimSway: (() => { x: number; y: number }) | null = null;
+export function setAimSway(fn: (() => { x: number; y: number }) | null) {
+  aimSway = fn;
 }
 
 /** AI level of the player whose turn it is, or null for a human / practice. */

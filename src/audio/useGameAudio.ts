@@ -5,9 +5,11 @@ import { worldToBoardMm } from '../engine/physics/ballistics';
 import { currentAi, useGameStore, type ThrownDart } from '../store/useGameStore';
 import { STICK_RADIUS } from '../game/scene/Board';
 import { callForTurnEnd, callForTurnStart } from './calls';
+import { currentPressure } from '../game/input/nerves';
 import { call, preloadLines, setCallerEnabled } from './caller';
 import {
   playBounceOut,
+  playHeartbeat,
   playCheer,
   playImpact,
   playWhoosh,
@@ -35,6 +37,9 @@ function impactSound(d: ThrownDart) {
   const mm = worldToBoardMm(imp);
   playImpact(distanceToWire(mm.x, mm.y) < BOARD.wireContact * 1.5 ? 'wire' : 'board');
 }
+
+/** Pressure from which you hear your heartbeat (a leg dart or more). */
+const HEARTBEAT_FROM = 0.4;
 
 /** Connects game events to sound effects and the caller. Mount once. */
 export function useGameAudio() {
@@ -101,5 +106,19 @@ export function useGameAudio() {
         (prev.phase === 'turnOver' || prev.screen !== 'game' || prev.match === null);
       if (turnStarted && s.match && !s.bullUp && !currentAi(s)) call(callForTurnStart(s.match));
     });
+  }, []);
+
+  // A heartbeat under you on the big darts, quickening with the pressure.
+  useEffect(() => {
+    let t: number | undefined;
+    const beat = () => {
+      const s = useGameStore.getState();
+      const p = s.phase === 'aiming' ? currentPressure() : 0;
+      if (p >= HEARTBEAT_FROM) playHeartbeat(p);
+      const bpm = 64 + 46 * p;
+      t = window.setTimeout(beat, p >= HEARTBEAT_FROM ? 60000 / bpm : 400);
+    };
+    beat();
+    return () => window.clearTimeout(t);
   }, []);
 }

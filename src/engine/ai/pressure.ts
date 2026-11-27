@@ -3,7 +3,7 @@ import { suggestCheckout } from '../modes/checkouts';
 import { CRICKET_TARGETS, type CricketState } from '../modes/cricket';
 import type { MatchState } from '../modes/match';
 import type { X01State } from '../modes/x01';
-import { labelValue, type AiTarget } from './strategy';
+import { chooseTargetFor, labelValue, type AiTarget } from './strategy';
 
 /** A dart that wins the leg, and one that wins the match. */
 const LEG_DART = 0.45;
@@ -99,4 +99,14 @@ function atcPressure(s: AtcState): number {
   if (others.some((o) => o.next >= last)) pressure += OPPONENT_CLOSE;
   else if (others.some((o) => o.next >= last - 3)) pressure += OPPONENT_ON_A_FINISH;
   return pressure;
+}
+
+/**
+ * Pressure on whoever is throwing, for a human player: the same as the AI
+ * feels, taking the dart they'd be expected to go for (the checkout route,
+ * the cricket number, the next clock target).
+ */
+export function pressureFor(match: MatchState): number {
+  if (match.status !== 'open') return 0;
+  return pressureOn(match, chooseTargetFor(match));
 }

@@ -5,6 +5,7 @@ import { WORLD } from '../../engine/board/geometry';
 import { RELEASE_POINT } from '../../engine/physics/throwModel';
 import { currentAi, useGameStore, type ThrownDart } from '../../store/useGameStore';
 import { isReadyToThrow } from '../input/holding';
+import { currentPressure } from '../input/nerves';
 import { STICK_RADIUS } from './Board';
 import {
   BOARD_CAM,
@@ -270,10 +271,12 @@ export function CameraDirector() {
       const swayOn = phase === 'aiming' && ai === null ? 1 : 0;
       sway.current += (swayOn - sway.current) * (1 - Math.exp(-SWAY_RATE * delta));
       if (sway.current > 1e-3) {
+        // Breathing deepens under pressure.
+        const k = sway.current * (1 + 1.6 * currentPressure());
         const b = breathOffset(elapsed.current);
-        look.x += b.x * sway.current;
-        look.y += b.y * sway.current;
-        pos.y += b.y * 0.3 * sway.current;
+        look.x += b.x * k;
+        look.y += b.y * k;
+        pos.y += b.y * 0.3 * k;
       }
       const age = (performance.now() - cameraKick.time) / 1000;
       const kick = kickOffset(age, cameraKick.strength * cur.half);

@@ -213,6 +213,38 @@ export function drawChalk(ctx: CanvasRenderingContext2D, sheet: ChalkSheet) {
     return;
   }
 
+  if (sheet.kind === 'killer') {
+    header(ctx, sheet, colX, colW);
+    const big = n > 3 ? 66 : 92;
+    sheet.names.forEach((_, i) => {
+      const x = colX[i]!;
+      const out = sheet.lives[i]! <= 0;
+      chalkText(ctx, String(sheet.numbers[i]), x, 330, big, out ? 0.55 : 1);
+      // Lives: a stroke each, the lost ones crossed off.
+      const w = Math.min(22, (colW * 0.7) / sheet.startLives);
+      for (let k = 0; k < sheet.startLives; k++) {
+        const lx = x + (k - (sheet.startLives - 1) / 2) * w;
+        chalkLine(ctx, lx, 440, lx + 2, 492, 4, k < sheet.lives[i]! ? 0.9 : 0.45);
+      }
+      const lost = sheet.startLives - Math.max(0, sheet.lives[i]!);
+      for (let k = 0; k < lost; k++) {
+        const lx = x + (sheet.startLives - 1 - k - (sheet.startLives - 1) / 2) * w;
+        chalkLine(ctx, lx - 9, 452, lx + 11, 480, 3, 0.75);
+      }
+      // A circled K once they're a killer; a line through anyone who's out.
+      if (sheet.killer[i] && !out) {
+        chalkText(ctx, 'K', x, 560, 48);
+        ctx.strokeStyle = `rgba(${CHALK},0.6)`;
+        ctx.lineWidth = 4;
+        ctx.beginPath();
+        ctx.arc(x, 560, 32, 0, Math.PI * 2);
+        ctx.stroke();
+      }
+      if (out) chalkLine(ctx, x - colW * 0.38, 300, x + colW * 0.38, 500, 5, 0.85);
+    });
+    return;
+  }
+
   // Other games: each player's score.
   header(ctx, sheet, colX, colW);
   sheet.values.forEach((v, i) => chalkText(ctx, v, colX[i]!, 360, n > 2 ? 52 : 72));

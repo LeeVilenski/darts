@@ -108,6 +108,25 @@ export function playWhoosh(power = 1) {
     .connect(sfxBus);
 }
 
+/** One heartbeat ("lub-dub"): two soft, low thumps. Louder with `strength` (0–1). */
+export function playHeartbeat(strength = 1) {
+  const c = ready();
+  if (!c) return;
+  const t = c.currentTime;
+  for (const [at, peak] of [
+    [0, 0.5],
+    [0.19, 0.32],
+  ] as const) {
+    const o = c.createOscillator();
+    o.type = 'sine';
+    o.frequency.setValueAtTime(62, t + at);
+    o.frequency.exponentialRampToValueAtTime(38, t + at + 0.14);
+    o.connect(envelope(c, t + at, peak * (0.25 + 0.75 * strength), 0.012, 0.16)).connect(sfxBus);
+    o.start(t + at);
+    o.stop(t + at + 0.2);
+  }
+}
+
 export type ImpactSurface = 'board' | 'wire' | 'surround' | 'floor';
 
 /** Dart hitting something: a thump, with a metallic ring for wire contact. */

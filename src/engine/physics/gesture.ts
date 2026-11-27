@@ -137,6 +137,12 @@ export class SteadyTracker {
     this.at = t;
   }
 
+  /** How long (ms) the pointer has been held steady (0 while it's moving). */
+  steadyFor(now: number): number {
+    const held = now - this.at;
+    return held >= STEADY_MS ? held : 0;
+  }
+
   /** Is the pointer holding a steady aim right now? */
   steady(now: number): boolean {
     return now - this.at >= STEADY_MS;

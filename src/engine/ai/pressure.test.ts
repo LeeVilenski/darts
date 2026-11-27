@@ -164,3 +164,16 @@ function value(label: string) {
   const n = Number(label.slice(1));
   return label[0] === 'T' ? n * 3 : label[0] === 'D' ? n * 2 : n;
 }
+
+describe('pressureFor (the player at the oche)', () => {
+  it('is calm early in a leg and tense on a match dart', async () => {
+    const { pressureFor } = await import('./pressure');
+    expect(pressureFor(x01(501, 501))).toBe(0);
+    expect(pressureFor(x01(40, 501, 1))).toBeGreaterThanOrEqual(0.7);
+    expect(pressureFor(x01(40, 501, 3))).toBeGreaterThanOrEqual(0.4);
+  });
+  it('is zero once the leg is over', async () => {
+    const { pressureFor } = await import('./pressure');
+    expect(pressureFor({ ...x01(40, 501, 1), status: 'legWon' })).toBe(0);
+  });
+});
