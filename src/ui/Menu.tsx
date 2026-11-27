@@ -7,7 +7,7 @@ import { useLifetimeStats } from '../store/lifetimeStats';
 import { useCareer } from '../store/useCareer';
 import { useGameStore, type GameSetup } from '../store/useGameStore';
 import { AccountPanel } from './AccountPanel';
-import { CareerSheet } from './CareerSheet';
+import { CareerHub } from './career/CareerHub';
 import { Icon, type IconName } from './icons';
 import { MODE_NAMES } from './modeView';
 import { PlaySetup, type GameKind } from './PlaySetup';
@@ -27,8 +27,13 @@ export function Menu() {
   const close = () => setSheet(null);
 
   return (
-    <div className={`menu ${view.screen === 'home' ? 'menu-home' : ''}`} data-testid="menu">
-      {view.screen === 'home' ? (
+    <div
+      className={`menu ${view.screen === 'home' && !careerOpen ? 'menu-home' : ''}`}
+      data-testid="menu"
+    >
+      {careerOpen ? (
+        <CareerHub />
+      ) : view.screen === 'home' ? (
         <Home onPlay={(kind) => setView({ screen: 'play', kind })} onSheet={setSheet} />
       ) : (
         <PlaySetup initialKind={view.kind} onBack={() => setView({ screen: 'home' })} />
@@ -43,7 +48,6 @@ export function Menu() {
       )}
       {sheet === 'player' && <PlayerSheet onClose={close} />}
       {sheet === 'help' && <HelpSheet onClose={close} />}
-      {careerOpen && <CareerSheet />}
     </div>
   );
 }

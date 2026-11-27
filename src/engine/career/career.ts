@@ -7,6 +7,7 @@ import { withStarter } from '../modes/types';
 import { applyDart, createX01, endTurn, type X01Options } from '../modes/x01';
 import { resolveDart, stuckDartOf } from '../physics/resolveDart';
 import { createRng, type Rng } from '../rng';
+import { addMatch, emptyCareerStats, type CareerStats, type MatchSummary } from './stats';
 import { EVENTS_PER_SEASON, PRIZE_SHARE, PROMOTION_PLACES, TIERS, type Reached } from './tiers';
 
 /** The player's id in brackets and standings. */
@@ -74,6 +75,8 @@ export interface CareerState {
   earnings: number;
   /** Set when a season has just ended, until the player dismisses it. */
   lastSeason: SeasonSummary | null;
+  /** Your record across career matches (missing in saves from before it was added). */
+  stats?: CareerStats;
 }
 
 // Fictional names only.
@@ -214,6 +217,7 @@ export function newCareer(you: string, seed: number): CareerState {
     trophies: [],
     earnings: 0,
     lastSeason: null,
+    stats: emptyCareerStats(),
   };
   return { ...base, event: drawEvent(base) };
 }
@@ -374,10 +378,24 @@ function endSeason(c: CareerState): CareerState {
  * Record your match (won or lost, with your legs/sets and theirs), then play
  * out the rest of the round and the event as far as it goes without you.
  */
-export function recordResult(c: CareerState, won: boolean, score: [number, number]): CareerState {
+export function recordResult(
+  c: CareerState,
+  won: boolean,
+  score: [number, number],
+  summary?: Omit<MatchSummary, 'opponent' | 'won' | 'score'>,
+): CareerState {
   const next = nextMatch(c);
   if (!next) return c;
   const r = next.round;
+  if (summary)
+    c = {
+      ...c,
+      stats: addMatch(
+        c.stats ?? emptyCareerStats(),
+        { ...summary, opponent: next.opponent.id, won, score },
+        { season: c.season, tier: c.tier, event: c.event.name, round: r },
+      ),
+    };
   const round = c.event.rounds[r]!.map((m) => {
     if (m.winner !== null || (m.a !== YOU && m.b !== YOU)) return m;
     const youA = m.a === YOU;
@@ -386,6 +404,47 @@ export function recordResult(c: CareerState, won: boolean, score: [number, numbe
   });
   const c2 = { ...c, event: { ...c.event, rounds: [...c.event.rounds.slice(0, r), round] } };
   return advance(simulateRound(c2));
+}
+
+export type ScheduleStatus = 'done' | 'current' | 'upcoming';
+
+/** This season's events in order, with your result for the ones played. */
+export function seasonSchedule(
+  c: CareerState,
+): { index: number; name: string; status: ScheduleStatus; result: EventResult | null }[] {
+  const played = c.results.filter((r) => r.season === c.season && r.tier === c.tier);
+  return TIERS[c.tier]!.events.map((name, index) => ({
+    index,
+    name,
+    status: index < c.eventIndex ? 'done' : index === c.eventIndex ? 'current' : 'upcoming',
+    result: index < c.eventIndex ? (played[index] ?? null) : null,
+  }));
+}
+
+/** Where you stand in the promotion race. */
+export function promotionRace(c: CareerState): {
+  position: number;
+  points: number;
+  /** Points behind the last promotion place (0 if you're in one). */
+  gap: number;
+  eventsLeft: number;
+  /** Most points still available to you this season. */
+  maxToCome: number;
+  top: boolean;
+} {
+  const table = standings(c);
+  const position = table.findIndex((s) => s.id === YOU) + 1;
+  const points = c.merit[YOU] ?? 0;
+  const line = table.filter((s) => s.id !== YOU)[PROMOTION_PLACES - 1]?.points ?? 0;
+  const eventsLeft = EVENTS_PER_SEASON - c.eventIndex;
+  return {
+    position,
+    points,
+    gap: position <= PROMOTION_PLACES ? 0 : Math.max(0, line - points),
+    eventsLeft,
+    maxToCome: eventsLeft * TIERS[c.tier]!.points.W,
+    top: c.tier === TIERS.length - 1,
+  };
 }
 
 export const dismissSeason = (c: CareerState): CareerState => ({ ...c, lastSeason: null });

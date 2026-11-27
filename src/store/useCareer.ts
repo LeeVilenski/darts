@@ -6,6 +6,7 @@ import {
   recordResult,
   type CareerState,
 } from '../engine/career/career';
+import { emptyCareerStats } from '../engine/career/stats';
 import { useGameStore } from './useGameStore';
 
 const KEY = 'darts.career.v1';
@@ -14,7 +15,7 @@ function load(): CareerState | null {
   try {
     const raw = localStorage.getItem(KEY);
     const c = raw ? (JSON.parse(raw) as CareerState) : null;
-    return c?.version === 1 ? c : null;
+    return c?.version === 1 ? { ...c, stats: c.stats ?? emptyCareerStats() } : null;
   } catch {
     return null;
   }
@@ -85,5 +86,12 @@ useGameStore.subscribe((s, prev) => {
   if (!c) return;
   const tally = (i: number) =>
     m.options.setsToWin ? m.players[i]!.setsWon : m.players[i]!.legsWon;
-  update(recordResult(c, m.winner === 0, [tally(0), tally(1)]));
+  const score: [number, number] = [tally(0), tally(1)];
+  update(
+    recordResult(c, m.winner === 0, score, {
+      // With sets, legs restart every set, so only count them in legs-only matches.
+      legs: m.options.setsToWin ? [0, 0] : score,
+      stats: m.players[0]!.stats,
+    }),
+  );
 });

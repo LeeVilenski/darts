@@ -1,6 +1,6 @@
 # Career mode v2: plan
 
-Status: agreed. Phase 1 is in progress.
+Status: agreed. Phase 1 (the career hub) is built; phase 2 (player attributes) is next.
 
 ## Where we are
 
