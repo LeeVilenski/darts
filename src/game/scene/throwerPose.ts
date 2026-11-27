@@ -83,8 +83,8 @@ export const JOINTS = {
   })(),
 } as const;
 
-/** Forearm length, elbow → grip (m). */
-export const FOREARM = 0.28;
+/** Elbow to the dart grip (the pinch between thumb and fingers), m: forearm plus hand. */
+export const FOREARM = 0.34;
 /** The dart is held this far behind its tip (m), at the barrel. */
 export const GRIP_BACK = 0.055;
 /** Roughly where a held dart points (toward the board, lofted); used to place the tip. */
