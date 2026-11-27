@@ -1,3 +1,4 @@
+import type { CSSProperties } from 'react';
 import {
   ATTR_INFO,
   ATTRS,
@@ -11,7 +12,7 @@ import { useCareer } from '../../store/useCareer';
 
 const pct = (x: number) => `${Math.round(Math.min(1, Math.max(0, x)) * 100)}%`;
 
-/** Your four attributes with XP bars, the tier cap, and skill points to spend. */
+/** Your four attributes as gauges, with XP to the next point, the tier cap and skill points. */
 export function AttributePanel({ c }: { c: CareerState }) {
   const spend = useCareer((s) => s.spendPoint);
   const a = c.attributes;
@@ -20,26 +21,46 @@ export function AttributePanel({ c }: { c: CareerState }) {
   return (
     <div className="hub-card attrs" data-testid="attributes">
       <div className="attrs-head">
-        <div>
-          <div className="eyebrow">Level {a.level}</div>
+        <div className="level-badge">
+          <small>Level</small>
+          {a.level}
+        </div>
+        <div className="level-bar">
+          <span className="muted small">
+            {a.xp} / {levelCost(a.level)} XP · ceiling {cap}
+          </span>
           <div className="progress thin" aria-label="XP to next level">
             <span style={{ width: pct(a.xp / levelCost(a.level)) }} />
           </div>
         </div>
         {a.points > 0 && (
           <span className="chip gold" data-testid="skill-points">
-            {a.points} skill point{a.points === 1 ? '' : 's'}
+            {a.points} point{a.points === 1 ? '' : 's'}
           </span>
         )}
       </div>
-      {ATTRS.map((attr) => {
-        const r = a.ratings[attr];
-        const capped = r >= cap;
-        return (
-          <div key={attr} className="attr">
-            <div className="attr-top">
-              <b>{ATTR_INFO[attr].label}</b>
-              <span className="attr-val">{r}</span>
+      <div className="gauge-grid">
+        {ATTRS.map((attr) => {
+          const r = a.ratings[attr];
+          const capped = r >= cap;
+          const style = {
+            '--val': `${(r / 99) * 360}deg`,
+            '--cap': `${(cap / 99) * 360}deg`,
+          } as CSSProperties;
+          return (
+            <div key={attr} className={`gauge-tile ${capped ? 'capped' : ''}`}>
+              <div className="gauge" style={style}>
+                <span className="gauge-val">{r}</span>
+              </div>
+              <div className="gauge-info">
+                <b>{ATTR_INFO[attr].label}</b>
+                <div className="progress thin" aria-label="XP to the next point">
+                  <span style={{ width: pct(capped ? 1 : a.progress[attr] / attrCost(r)) }} />
+                </div>
+                <span className="muted small">
+                  {capped ? 'At your ceiling' : ATTR_INFO[attr].trainedBy}
+                </span>
+              </div>
               {a.points > 0 && (
                 <button
                   type="button"
@@ -52,22 +73,9 @@ export function AttributePanel({ c }: { c: CareerState }) {
                 </button>
               )}
             </div>
-            <div className="attr-bar" aria-hidden="true">
-              <span className="fill" style={{ width: pct(r / 99) }} />
-              <span
-                className="next"
-                style={{ left: pct(r / 99), width: pct(a.progress[attr] / attrCost(r) / 99) }}
-              />
-              <span className="cap" style={{ left: pct(cap / 99) }} />
-            </div>
-            <div className="muted small">
-              {capped
-                ? `At your ceiling of ${cap}. Move up a tier to go further.`
-                : `${ATTR_INFO[attr].blurb} Trained by: ${ATTR_INFO[attr].trainedBy.toLowerCase()}.`}
-            </div>
-          </div>
-        );
-      })}
+          );
+        })}
+      </div>
     </div>
   );
 }
@@ -91,11 +99,14 @@ export function TrainingCard({ c }: { c: CareerState }) {
   const ready = canTrain(c);
   return (
     <div className="hub-card training" data-testid="training">
-      <div className="eyebrow">Training</div>
-      <p>
-        {ready
-          ? 'One session a week. Pick a drill: it works one attribute hardest.'
-          : 'Trained this week. You can train again next week.'}
+      <div className="section-row">
+        <div className="eyebrow">Training</div>
+        <span className={`chip ${ready ? 'gold' : ''}`}>
+          {ready ? '1 session left' : 'Done this week'}
+        </span>
+      </div>
+      <p className="muted small">
+        {ready ? 'Pick a drill: it works one attribute hardest.' : 'You can train again next week.'}
       </p>
       <div className="drill-grid">
         {ATTRS.map((attr) => (
@@ -107,6 +118,7 @@ export function TrainingCard({ c }: { c: CareerState }) {
             onClick={() => train(attr)}
             data-testid={`train-${attr}`}
           >
+            <span className="drill-val">{c.attributes.ratings[attr]}</span>
             <b>{ATTR_INFO[attr].label}</b>
             <span className="muted small">{DRILLS[attr].name}</span>
           </button>

@@ -37,7 +37,8 @@ import { goals } from '../../engine/career/goals';
 import { careerAverage, form, winRate } from '../../engine/career/stats';
 import { appearanceFor } from '../../game/scene/appearance';
 import { useCareer } from '../../store/useCareer';
-import { Icon } from '../icons';
+import { Icon, type IconName } from '../icons';
+import { repBand } from '../../engine/career/story';
 import { Segmented } from '../Segmented';
 import { AttributePanel, RatingsLine, TrainingCard } from './Attributes';
 import { InboxTab, MessageCard, Reputation } from './Inbox';
@@ -45,12 +46,12 @@ import { rivalOf, unread } from '../../engine/career/milestones';
 import { KitShop } from './Kit';
 
 type Tab = 'home' | 'calendar' | 'rankings' | 'inbox' | 'profile';
-const TABS: { id: Tab; label: string }[] = [
-  { id: 'home', label: 'Home' },
-  { id: 'calendar', label: 'Calendar' },
-  { id: 'rankings', label: 'Rankings' },
-  { id: 'inbox', label: 'Inbox' },
-  { id: 'profile', label: 'Profile' },
+const TABS: { id: Tab; label: string; icon: IconName }[] = [
+  { id: 'home', label: 'Home', icon: 'home' },
+  { id: 'calendar', label: 'Calendar', icon: 'calendar' },
+  { id: 'rankings', label: 'Rankings', icon: 'chart' },
+  { id: 'inbox', label: 'Inbox', icon: 'mail' },
+  { id: 'profile', label: 'Profile', icon: 'user' },
 ];
 
 /** Visual theme per stage: chalk and wood at the pub up to broadcast gold on tour. */
@@ -71,24 +72,24 @@ export function CareerHub() {
 
   return (
     <div className="menu-card career-hub" data-theme={theme} data-testid="career">
-      <header className="screen-head">
-        <button type="button" className="back-btn" onClick={() => setOpen(false)} aria-label="Back">
-          <Icon name="back" />
-        </button>
-        <div className="hub-title">
-          <h2>{career ? displayName(career) : 'Career'}</h2>
-          {career && (
-            <span className="hub-sub">
-              {STAGE_NAMES[career.tier]} · Season {career.season} · Week {career.week}
-            </span>
-          )}
-        </div>
-        {career && (
-          <span className="hub-money" title="Money to spend">
-            {money(balance(career))}
-          </span>
-        )}
-      </header>
+      {career ? (
+        <HubHero c={career} onBack={() => setOpen(false)} />
+      ) : (
+        <header className="screen-head">
+          <button
+            type="button"
+            className="back-btn"
+            onClick={() => setOpen(false)}
+            aria-label="Back"
+          >
+            <Icon name="back" />
+          </button>
+          <div className="hub-title">
+            <h2>Career</h2>
+            <span className="hub-sub">From the pub to the Pro Tour</span>
+          </div>
+        </header>
+      )}
 
       {career ? (
         <>
@@ -103,7 +104,8 @@ export function CareerHub() {
                 onClick={() => setTab(t.id)}
                 data-testid={`career-tab-${t.id}`}
               >
-                {t.label}
+                <Icon name={t.icon} />
+                <span>{t.label}</span>
                 {t.id === 'inbox' && unread(career) > 0 && (
                   <span className="badge" data-testid="unread">
                     {unread(career)}
@@ -127,6 +129,75 @@ export function CareerHub() {
   );
 }
 
+/** Header: who you are, where you are, and how far through the season. */
+function HubHero({ c, onBack }: { c: CareerState; onBack(): void }) {
+  const band = repBand(c.reputation);
+  return (
+    <header className="hub-hero">
+      <div className="hero-top">
+        <button type="button" className="back-btn" onClick={onBack} aria-label="Back">
+          <Icon name="back" />
+        </button>
+        <span className="stage-pill">{STAGE_NAMES[c.tier]}</span>
+        <span className="hero-money" title="Money to spend">
+          <small>Bank</small>
+          {money(balance(c))}
+        </span>
+      </div>
+      <div className="hero-main">
+        <PlayerBadge name={c.you} size={64} />
+        <div className="hero-name">
+          <h2>{displayName(c)}</h2>
+          <div className="hero-meta">
+            <span className="meta-pill">
+              <Icon name="star" /> {band.name}
+            </span>
+            <span className="meta-pill">Level {c.attributes.level}</span>
+          </div>
+        </div>
+      </div>
+      <SeasonStrip c={c} />
+    </header>
+  );
+}
+
+/** Thirteen ticks for the weeks of the season, with titles marked. */
+function SeasonStrip({ c }: { c: CareerState }) {
+  const weeks = Array.from({ length: WEEKS_PER_SEASON }, (_, i) => i + 1);
+  const won = new Set(
+    c.results
+      .filter((r) => r.season === c.season && r.round === roundNames(r.field).length)
+      .map((r) => r.week),
+  );
+  const played = new Set(c.results.filter((r) => r.season === c.season).map((r) => r.week));
+  return (
+    <div
+      className="season-strip"
+      aria-label={`Season ${c.season}, week ${c.week} of ${WEEKS_PER_SEASON}`}
+    >
+      <div className="strip-label">
+        <span>Season {c.season}</span>
+        <span>
+          Week <b>{c.week}</b> / {WEEKS_PER_SEASON}
+        </span>
+      </div>
+      <div className="strip-ticks">
+        {weeks.map((w) => (
+          <span
+            key={w}
+            className={[
+              w < c.week ? 'done' : '',
+              w === c.week ? 'now' : '',
+              played.has(w) ? 'played' : '',
+              won.has(w) ? 'won' : '',
+            ].join(' ')}
+          />
+        ))}
+      </div>
+    </div>
+  );
+}
+
 /* ---------------------------------------------------------------- new career */
 
 function NewCareer() {
@@ -134,7 +205,9 @@ function NewCareer() {
   const [name, setName] = useState('');
   return (
     <div className="hub-body">
-      <div className="hub-card hero">
+      <div className="hub-card new-career">
+        <div className="eyebrow">A new career</div>
+        <div className="big">Every pro started down the pub</div>
         <p>
           Every pro started down the pub. Begin at your local and work your way up: a County card,
           the Challenge Tour, Q-School, and a <b>Tour Card</b>.
@@ -201,7 +274,7 @@ function HomeTab({ c, onTab }: { c: CareerState; onTab(t: Tab): void }) {
         .slice(-2)
         .reverse()
         .map((m) => (
-          <MessageCard key={m.id} c={c} m={m} />
+          <MessageCard key={m.id} c={c} m={m} compact={!m.offer && !m.choice} />
         ))}
       {unread(c) > 2 && (
         <button type="button" className="ghost-btn small" onClick={() => onTab('inbox')}>
@@ -222,11 +295,21 @@ function HomeTab({ c, onTab }: { c: CareerState; onTab(t: Tab): void }) {
         </button>
       </div>
 
+      <div className="section-head">
+        <h3>Goals</h3>
+      </div>
       {goals(c).map((g) => (
         <div key={g.title} className="hub-card goal">
-          <div className="eyebrow">Goal</div>
-          <b>{g.title}</b>
-          <p className="muted">{g.detail}</p>
+          <div className="goal-row">
+            <span className="goal-icon">
+              <Icon name="flag" />
+            </span>
+            <div className="goal-text">
+              <b>{g.title}</b>
+              <span className="muted small">{g.detail}</span>
+            </div>
+            {g.progress !== null && <span className="goal-pct">{pct(g.progress)}</span>}
+          </div>
           {g.progress !== null && (
             <div className="progress" aria-hidden="true">
               <span style={{ width: pct(g.progress) }} />
@@ -237,10 +320,10 @@ function HomeTab({ c, onTab }: { c: CareerState; onTab(t: Tab): void }) {
 
       {live && liveEvent && (
         <>
-          <h3>
-            {c.event ? '' : 'Last time: '}
-            {liveEvent.name}
-          </h3>
+          <div className="section-head">
+            <h3>{c.event ? 'The draw' : 'Last event'}</h3>
+            <span className="muted small">{liveEvent.name}</span>
+          </div>
           <Bracket c={c} live={live} field={liveEvent.field} />
         </>
       )}
@@ -278,49 +361,64 @@ function ThisWeek({ c }: { c: CareerState }) {
   const skip = useCareer((s) => s.skipWeek);
   const events = weekEvents(c).filter((e) => relevant(c, e) || eligibility(c, e).ok);
   const open = events.filter((e) => eligibility(c, e).ok);
+  const locked = events.filter((e) => !eligibility(c, e).ok);
   return (
-    <div className="hub-card fixture" data-testid="this-week">
-      <div className="eyebrow">
-        Week {c.week} of {WEEKS_PER_SEASON}
+    <section className="this-week" data-testid="this-week">
+      <div className="section-head">
+        <h3>This week</h3>
+        <span className="muted small">
+          {open.length ? `Pick one event` : 'Nothing open to you'}
+        </span>
       </div>
-      <b>{open.length ? 'Pick your event this week' : 'Nothing for you this week'}</b>
-      <ul className="week-events">
-        {events.map((e) => {
-          const ok = eligibility(c, e);
-          return (
-            <li key={e.id} className={ok.ok ? '' : 'locked'}>
-              <div className="cal-main">
-                <span>
-                  <CircuitTag circuit={e.circuit} />
+      {open.map((e) => {
+        const ok = eligibility(c, e);
+        return (
+          <div key={e.id} className={`ticket ${e.circuit}`}>
+            <div className="ticket-main">
+              <span className="ticket-kicker">
+                {CIRCUIT_INFO[e.circuit].short} · {VENUES[e.venue]} · {e.field} players
+              </span>
+              <b className="ticket-name">{e.name}</b>
+              {ok.ok && ok.via === 'invite' && (
+                <span className="gold small">
+                  <Icon name="star" /> You have a place
                 </span>
-                <b>{e.name}</b>
-                <span className="muted small">
-                  {e.field} players · {VENUES[e.venue]}
-                  {e.prize ? ` · ${money(e.prize)} to the winner` : ''}
-                </span>
-                {!ok.ok && <span className="lock-reason">🔒 {ok.reason}</span>}
-                {ok.ok && ok.via === 'invite' && (
-                  <span className="gold small">You have a place</span>
-                )}
-              </div>
-              {ok.ok && (
-                <button
-                  type="button"
-                  className="primary-btn small"
-                  onClick={() => enter(e.id)}
-                  data-testid={`enter-${e.slug}`}
-                >
-                  {ok.via === 'fee' ? `Enter (${money(e.fee ?? 0)})` : 'Enter'}
-                </button>
               )}
-            </li>
-          );
-        })}
-      </ul>
+            </div>
+            <div className="ticket-side">
+              {e.prize > 0 && <span className="ticket-prize">{money(e.prize)}</span>}
+              <button
+                type="button"
+                className="primary-btn small"
+                onClick={() => enter(e.id)}
+                data-testid={`enter-${e.slug}`}
+              >
+                {ok.ok && ok.via === 'fee' ? `Enter · ${money(e.fee ?? 0)}` : 'Enter'}
+              </button>
+            </div>
+          </div>
+        );
+      })}
+      {locked.length > 0 && (
+        <ul className="locked-list">
+          {locked.map((e) => {
+            const ok = eligibility(c, e);
+            return (
+              <li key={e.id}>
+                <Icon name="lock" />
+                <span>
+                  <b>{e.name}</b>
+                  <span className="muted small">{!ok.ok && ok.reason}</span>
+                </span>
+              </li>
+            );
+          })}
+        </ul>
+      )}
       <button type="button" className="ghost-btn" onClick={skip} data-testid="skip-week">
         {open.length ? 'Skip this week' : 'Rest and move on'}
       </button>
-    </div>
+    </section>
   );
 }
 
@@ -328,58 +426,62 @@ function Fixture({ c }: { c: CareerState }) {
   const play = useCareer((s) => s.play);
   const next = nextMatch(c)!;
   const e = next.event;
+  const rival = rivalOf(c)?.id === next.opponent.id;
   return (
-    <div className="hub-card fixture" data-testid="next-match">
-      <div className="eyebrow">
-        {e.name} · {next.roundName} · {VENUES[e.venue]}
-      </div>
-      <div className="fixture-vs">
-        <PlayerBadge name={c.you} />
-        <span className="vs">v</span>
-        <PlayerBadge name={next.opponent.name} />
-      </div>
-      <div className="fixture-names">
-        <span className="you">{displayName(c)}</span>
-        <span>
-          {next.opponent.name}
-          {rivalOf(c)?.id === next.opponent.id && (
-            <span className="chip rival" data-testid="rival">
-              Rival
-            </span>
-          )}
-        </span>
-      </div>
-      <dl className="fixture-facts">
+    <section className={`hub-card fixture ${e.circuit}`} data-testid="next-match">
+      <div className="fx-head">
         <div>
-          <dt>Opponent</dt>
-          <dd>
-            {AI_SKILL[next.opponent.level].label} level ·{' '}
+          <div className="eyebrow">Next match · {VENUES[e.venue]}</div>
+          <b className="fx-event">{e.name}</b>
+        </div>
+        <span className="round-pill">{next.roundName}</span>
+      </div>
+      <div className="fx-tape">
+        <div className="fx-side you">
+          <PlayerBadge name={c.you} size={72} />
+          <b>{displayName(c)}</b>
+          <RatingsLine a={c.attributes} />
+        </div>
+        <div className="fx-vs">VS</div>
+        <div className="fx-side">
+          <PlayerBadge name={next.opponent.name} size={72} />
+          <b>
+            {next.opponent.name}
+            {rival && (
+              <span className="chip rival" data-testid="rival">
+                Rival
+              </span>
+            )}
+          </b>
+          <span className="fx-level">{AI_SKILL[next.opponent.level].label} level</span>
+          <span className="muted small">
             {describePersonality(personalityFor(next.opponent.name))}
-          </dd>
+          </span>
+        </div>
+      </div>
+      <div className="fx-facts">
+        <div>
+          <span>Head to head</span>
+          <b>{h2hLine(c.stats.h2h[next.opponent.id])}</b>
         </div>
         <div>
-          <dt>Your game</dt>
-          <dd>
-            <RatingsLine a={c.attributes} />
-          </dd>
+          <span>Format</span>
+          <b>{describeFormat(next.format)}</b>
         </div>
-        <div>
-          <dt>Head to head</dt>
-          <dd>{h2hLine(c.stats.h2h[next.opponent.id])}</dd>
-        </div>
-        <div>
-          <dt>Format</dt>
-          <dd>501 · {describeFormat(next.format)} · bull-up to throw first</dd>
-        </div>
-        <div>
-          <dt>At stake</dt>
-          <dd>{stakeLine(e, next.round)}</dd>
-        </div>
-      </dl>
-      <button type="button" className="primary-btn" onClick={play} data-testid="career-play">
-        Play {next.roundName.toLowerCase()}
+      </div>
+      <div className="fx-stake">
+        <Icon name="trophy" />
+        <span>{stakeLine(e, next.round)}</span>
+      </div>
+      <button
+        type="button"
+        className="primary-btn play-btn"
+        onClick={play}
+        data-testid="career-play"
+      >
+        <Icon name="play" /> Play {next.roundName.toLowerCase()}
       </button>
-    </div>
+    </section>
   );
 }
 
@@ -421,10 +523,6 @@ function FormStrip({ results }: { results: string[] }) {
       ))}
     </div>
   );
-}
-
-function CircuitTag({ circuit }: { circuit: CircuitId }) {
-  return <span className={`circuit-tag ${circuit}`}>{CIRCUIT_INFO[circuit].short}</span>;
 }
 
 /** A round badge in the player's shirt colours with their initials. */
@@ -471,14 +569,20 @@ function CalendarTab({ c }: { c: CareerState }) {
         ]}
         onChange={setFilter}
       />
-      <ol className="calendar weeks">
+      <ol className="timeline">
         {weeks.map((w) => {
           const events = weekEvents(c, w).filter(
             (e) => filter === 'all' || relevant(c, e) || resultFor(c, e.id),
           );
           return (
-            <li key={w} className={`week ${w === c.week ? 'current' : w < c.week ? 'done' : ''}`}>
-              <span className="cal-num">{w}</span>
+            <li
+              key={w}
+              className={`tl-week ${w === c.week ? 'current' : w < c.week ? 'done' : ''}`}
+            >
+              <span className="tl-dot">
+                <small>W</small>
+                {w}
+              </span>
               <div className="week-list">
                 {events.length === 0 && (
                   <span className="muted small">Nothing on your circuits</span>
@@ -498,8 +602,9 @@ function CalendarTab({ c }: { c: CareerState }) {
 /** Events on your circuits, or one step up (so you can see what's next). */
 function relevant(c: CareerState, e: CalEvent): boolean {
   if (e.kind === 'qschool') return c.tier >= 1 && c.tier < 3;
-  if (c.tier >= 2 && e.circuit === 'pub') return false;
-  return CIRCUIT_INFO[e.circuit].stage <= c.tier + 1;
+  const stage = CIRCUIT_INFO[e.circuit].stage;
+  // Your circuit, the one above (what's next) and the one below (still open to you).
+  return stage <= c.tier + 1 && stage >= c.tier - 1 && !(c.tier >= 2 && e.circuit === 'pub');
 }
 
 function CalendarEvent({ c, e }: { c: CareerState; e: CalEvent }) {
@@ -515,15 +620,17 @@ function CalendarEvent({ c, e }: { c: CareerState; e: CalEvent }) {
         ? `Won by ${nameOf(c, e.result.winner).split(' ').at(-1)}`
         : ok.ok
           ? 'Open to you'
-          : '🔒';
+          : 'Locked';
   return (
     <div
-      className={`cal-event ${mine ? 'done' : ''} ${locked ? 'locked' : ''}`}
+      className={`cal-event ${e.circuit} ${mine ? 'done' : ''} ${locked ? 'locked' : ''} ${entered ? 'entered' : ''}`}
       data-testid="calendar-event"
     >
       <div className="cal-main">
-        <span>
-          <CircuitTag circuit={e.circuit} />
+        <span className="ticket-kicker">
+          {locked && <Icon name="lock" />}
+          {CIRCUIT_INFO[e.circuit].short}
+          {e.kind === 'major' ? ' · Major' : e.kind === 'finals' ? ' · Finals' : ''}
         </span>
         <b>{e.name}</b>
         <span className="muted small">
@@ -585,9 +692,30 @@ function RankingsTab({ c }: { c: CareerState }) {
       <p className="muted small">
         {tour
           ? 'Prize money over the last two seasons.'
-          : `Order of merit after week ${c.week - 1}.`}{' '}
-        {CUTS[circuit].map(([n, what]) => `Top ${n}: ${what}`).join(' · ')}
+          : `Order of merit after week ${c.week - 1}.`}
       </p>
+      {table.length >= 3 && (
+        <div className="podium" aria-hidden="true">
+          {[1, 0, 2].map((i) => {
+            const row = table[i]!;
+            return (
+              <div key={row.id} className={`podium-step p${i + 1} ${row.id === YOU ? 'you' : ''}`}>
+                <PlayerBadge name={row.id === YOU ? c.you : row.name} size={i === 0 ? 52 : 42} />
+                <span className="podium-name">{row.name.replace(/"[^"]*" /, '')}</span>
+                <span className="podium-pts">{tour ? money(row.points) : `${row.points} pts`}</span>
+                <span className="podium-block">{i + 1}</span>
+              </div>
+            );
+          })}
+        </div>
+      )}
+      <div className="cut-legend">
+        {CUTS[circuit].map(([n, what]) => (
+          <span key={n} className="chip">
+            Top {n}: {what}
+          </span>
+        ))}
+      </div>
       <table className="stats merit" data-testid="merit">
         <tbody>
           {table.map((row, i) => (
