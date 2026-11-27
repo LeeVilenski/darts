@@ -36,7 +36,7 @@ function fingerSegments() {
 /** Points on the dart's surface (hand space), with how far from the grip they are along it. */
 function dartSurface() {
   const out: { p: Vector3; s: number }[] = [];
-  const axis = new Vector3(-1, 0, 0); // tip out past the thumb
+  const axis = new Vector3(0, 0, 1); // pointing the way the palm faces, at the board
   for (let s = -(TIP + BARREL + SHAFT + FLIGHT - GRIP_FROM_TIP); s <= GRIP_FROM_TIP; s += 0.002) {
     const fromTip = GRIP_FROM_TIP - s;
     const r =
@@ -60,35 +60,42 @@ function dartSurface() {
 }
 
 describe('the throwing grip', () => {
-  it('pinches the barrel between the forefinger pad and the thumb pad', () => {
-    const index = fingerSegments()
-      .filter((g) => g.finger === 0)
-      .at(-1)!;
-    const toIndex = segDist(PINCH_POINT, index.a, index.b) - index.r;
+  it('pinches the barrel between the side of the forefinger and the thumb', () => {
+    const fore = fingerSegments().filter((g) => g.finger === 0);
+    const toFore = Math.min(...fore.map((g) => segDist(PINCH_POINT, g.a, g.b) - g.r));
     const toThumb = PINCH_POINT.distanceTo(THUMB.tip) - THUMB.r * 0.9;
-    // Both pads touch the barrel (within a millimetre or so), one from each side.
-    expect(Math.abs(toIndex - BARREL_R)).toBeLessThan(0.0025);
+    // Both touch the barrel (within a millimetre or so), from opposite sides.
+    expect(Math.abs(toFore - BARREL_R)).toBeLessThan(0.0015);
     expect(Math.abs(toThumb - BARREL_R)).toBeLessThan(0.0025);
-    expect(THUMB.tip.y).toBeLessThan(PINCH_POINT.y); // thumb underneath
+    expect(THUMB.tip.x).toBeGreaterThan(PINCH_POINT.x); // thumb on the outside
+    expect(fore[0]!.a.x).toBeLessThan(PINCH_POINT.x); // forefinger on the inside
+  });
+
+  it('is a right hand: thumb on the +X side, where X = Y × Z', () => {
+    expect(THUMB.base.x).toBeGreaterThan(0);
+    expect(FINGERS[0]!.x).toBeGreaterThan(FINGERS[3]!.x); // forefinger nearest the thumb
+    // Fingers up, palm facing away from you: the thumb is on your left (world -x).
+    const q = new Quaternion();
+    gripQuaternion(new Vector3(0, 1, 0), new Vector3(0, 0, -1), q, new Vector3());
+    expect(new Vector3(1, 0, 0).applyQuaternion(q).x).toBeCloseTo(-1, 6);
   });
 
   it('holds the dart clear of the palm and the other fingers', () => {
     const segs = fingerSegments();
-    for (const { p, s } of dartSurface()) {
+    for (const { p } of dartSurface()) {
       // The palm: an ellipsoid at (0, 0.048, 0.002) with radii (0.04, 0.045, 0.017).
       const e = p.clone().sub(new Vector3(0, 0.048, 0.002));
       const inPalm = (e.x / 0.04) ** 2 + (e.y / 0.045) ** 2 + (e.z / 0.017) ** 2 < 1;
       expect(inPalm).toBe(false);
       for (const g of segs) {
-        // The forefinger's last joint holds the barrel, so it may touch it there.
-        const pinching = g.finger === 0 && Math.abs(s) < BARREL / 2;
-        if (pinching) continue;
+        // The barrel lies along the forefinger, so it may touch that.
+        if (g.finger === 0) continue;
         expect(segDist(p, g.a, g.b)).toBeGreaterThan(g.r * 0.8);
       }
     }
   });
 
-  it('points the dart out past the thumb, across the fingers, whatever the forearm angle', () => {
+  it('points the dart the way the palm faces, square to the forearm, whatever its angle', () => {
     const q = new Quaternion();
     const held = new Vector3();
     for (const along of [
@@ -98,8 +105,8 @@ describe('the throwing grip', () => {
     ]) {
       const dart = new Vector3(0, 0.15, -1).normalize();
       gripQuaternion(along, dart, q, held);
-      expect(held.dot(along.clone().normalize())).toBeCloseTo(0, 6); // across the fingers
-      expect(new Vector3(-1, 0, 0).applyQuaternion(q).distanceTo(held)).toBeLessThan(1e-6);
+      expect(held.dot(along.clone().normalize())).toBeCloseTo(0, 6); // square to the forearm
+      expect(new Vector3(0, 0, 1).applyQuaternion(q).distanceTo(held)).toBeLessThan(1e-6); // palm facing
       expect(held.dot(dart)).toBeGreaterThan(0.5); // still pointing the right way
     }
   });
