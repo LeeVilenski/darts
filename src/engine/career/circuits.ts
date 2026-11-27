@@ -114,8 +114,10 @@ export const CIRCUIT_INFO: Record<CircuitId, CircuitInfo> = {
 export const WEEKS_PER_SEASON = 13;
 /** Tour cards last this many seasons (the one you win it for, and the next). */
 export const TOUR_CARD_SEASONS = 2;
-/** Keep your card by finishing inside this many on the tour ranking. */
-export const TOUR_CARD_KEEP = 64;
+/** Keep your card by finishing inside this many on the tour ranking when it expires. */
+export const TOUR_CARD_KEEP = 48;
+/** Automatic places in the majors (the rest come through qualifiers). */
+export const MAJOR_PLACES = 14;
 /** The tour ranking counts prize money over this many seasons. */
 export const RANKING_SEASONS = 2;
 export const QSCHOOL_FEE = 500;

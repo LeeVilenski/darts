@@ -26,6 +26,7 @@ import {
   describeFormat,
   prizeShare,
   roundNames,
+  MAJOR_PLACES,
   TOUR_CARD_KEEP,
   WEEKS_PER_SEASON,
   type CircuitId,
@@ -542,7 +543,7 @@ const CUTS: Record<CircuitId, [number, string][]> = {
     [16, 'Challenge Finals'],
   ],
   tour: [
-    [14, 'Majors'],
+    [MAJOR_PLACES, 'Majors'],
     [TOUR_CARD_KEEP, 'Keeps card'],
   ],
 };

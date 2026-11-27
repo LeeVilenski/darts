@@ -29,7 +29,7 @@ describe('the story: pub to county', () => {
     let c = winAll(enter(newCareer('Sam', 4), 'pub'));
     const subjects = c.inbox.map((m) => m.subject);
     expect(subjects).toContain('First win on the board');
-    expect(subjects.some((s) => s.startsWith('Local winner'))).toBe(true);
+    expect(subjects.some((s) => s.startsWith('First title'))).toBe(true);
     const offer = c.inbox.find((m) => m.offer)!;
     expect(offer.from).toBe('secretary');
     expect(c.reputation).toBeGreaterThan(0);
@@ -74,5 +74,37 @@ describe('the story: pub to county', () => {
   it('reputation has named bands', () => {
     expect(repBand(0).name).toBe('Unknown');
     expect(repBand(130)).toMatchObject({ name: 'Pub legend', next: 250 });
+  });
+});
+
+describe('the story: the pro game', () => {
+  it('a Tour Card brings a welcome, and the ranking decides your majors', async () => {
+    const { grantCard, tourPosition } = await import('./career');
+    const c = evaluate(grantCard(newCareer('Sam', 6), 'tour'));
+    expect(c.inbox.some((m) => m.subject === 'Welcome to the Pro Tour')).toBe(true);
+    // Fresh on tour with no money: outside the majors' automatic places.
+    expect(tourPosition(c)).toBeGreaterThan(14);
+    const gp = c.calendar.find((e) => e.slug === 'grand-prix')!;
+    expect(eligibility(c, gp).ok).toBe(false);
+  });
+
+  it('an expiring card is lost outside the top 48, and kept inside it', async () => {
+    const { grantCard, tourPosition } = await import('./career');
+    let c = grantCard(newCareer('Sam', 6), 'tour');
+    c = { ...c, cards: { ...c.cards, tour: 1 } }; // runs out this season
+    let lost = c;
+    while (lost.season === 1) lost = withStory(lost, skipWeek);
+    expect(lost.cards.tour).toBeNull();
+    expect(lost.tier).toBe(2);
+    expect(lost.inbox.some((m) => m.subject === 'Your Tour Card has expired')).toBe(true);
+    expect(lost.inbox.some((m) => m.subject === 'Your Tour Card is at risk')).toBe(true);
+    expect(lost.inbox.some((m) => m.subject === 'Season 1 in review')).toBe(true);
+
+    // Rich enough to be ranked: kept for two more seasons.
+    let kept: CareerState = { ...c, money: { ...c.money, you: { 1: 500000 } } };
+    expect(tourPosition(kept)).toBe(1);
+    while (kept.season === 1) kept = withStory(kept, skipWeek);
+    expect(kept.cards.tour).toBe(3);
+    expect(kept.lastSeason!.changes[0]).toMatch(/^Tour Card kept/);
   });
 });

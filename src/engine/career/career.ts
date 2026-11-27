@@ -28,6 +28,8 @@ import {
   CIRCUITS,
   prizeShare,
   QSCHOOL_FEE,
+  TOUR_CARD_KEEP,
+  TOUR_CARD_SEASONS,
   RANKING_SEASONS,
   reachedLabel,
   roundNames,
@@ -293,7 +295,20 @@ export function stageOf(cards: Cards, season: number): number {
   return 0;
 }
 
+/** Last season's tour money for the regulars, so the ranking has shape from day one. */
+function seedMoney(roster: CareerPlayer[], seed: number): CareerState['money'] {
+  const rng = createRng(mix(seed, 5));
+  const money: CareerState['money'] = {};
+  for (const p of roster) {
+    if (p.circuit !== 'tour') continue;
+    const [lo, hi] = p.level === 'pro' ? [40000, 220000] : [6000, 45000];
+    money[p.id] = { 0: Math.round((lo + rng.next() ** 2 * (hi - lo)) / 250) * 250 };
+  }
+  return money;
+}
+
 export function newCareer(you: string, seed: number): CareerState {
+  const roster = createRoster(seed);
   return {
     version: 2,
     seed: seed >>> 0,
@@ -302,12 +317,12 @@ export function newCareer(you: string, seed: number): CareerState {
     week: 1,
     cards: { county: false, challenge: false, tour: null },
     tier: 0,
-    roster: createRoster(seed),
+    roster,
     calendar: buildCalendar(1),
     event: null,
     lastEvent: null,
     merit: emptyMerit(),
-    money: {},
+    money: seedMoney(roster, seed),
     invites: [],
     qschoolPlace: false,
     results: [],
@@ -674,7 +689,7 @@ export function grantCard(c: CareerState, card: Card): CareerState {
   const cards: Cards =
     card === 'tour'
       ? // Valid for the coming season and the one after.
-        { ...c.cards, county: true, challenge: true, tour: c.season + 2 }
+        { ...c.cards, county: true, challenge: true, tour: c.season + TOUR_CARD_SEASONS }
       : card === 'challenge'
         ? { ...c.cards, county: true, challenge: true }
         : { ...c.cards, county: true };
@@ -682,8 +697,14 @@ export function grantCard(c: CareerState, card: Card): CareerState {
 }
 
 function restage(c: CareerState): CareerState {
-  const tier = Math.max(c.tier, stageOf(c.cards, c.season));
-  return tier === c.tier ? c : { ...c, tier, attributes: recheck(c.attributes, tier).attrs };
+  const tier = stageOf(c.cards, c.season);
+  if (tier === c.tier) return c;
+  // Moving up raises your ceiling; dropping down keeps what you've built.
+  return {
+    ...c,
+    tier,
+    attributes: tier > c.tier ? recheck(c.attributes, tier).attrs : c.attributes,
+  };
 }
 
 /** Simulate a whole event without you. */
@@ -824,9 +845,24 @@ function endSeason(c: CareerState): CareerState {
       changes.push(`${cap(CARD_NAMES[card].replace(/^an? /, ''))} earned`);
     }
   }
+  // Tour Cards run out: keep yours by finishing inside the top TOUR_CARD_KEEP.
+  if (next.cards.tour !== null && next.cards.tour <= c.season) {
+    const pos = tourPosition(next) ?? Infinity;
+    places.push({ circuit: 'tour', position: pos, of: tourRanking(next).length });
+    if (pos <= TOUR_CARD_KEEP) {
+      next = { ...next, cards: { ...next.cards, tour: c.season + TOUR_CARD_SEASONS } };
+      changes.push(`Tour Card kept (${ordinal(pos)} on the ranking)`);
+    } else {
+      next = { ...next, cards: { ...next.cards, tour: null } };
+      changes.push(`Tour Card lost (${ordinal(pos)}): back to Q-School`);
+    }
+  } else if (holdsCard(next, 'tour') && c.tier === 3) {
+    const pos = tourPosition(next) ?? 0;
+    places.push({ circuit: 'tour', position: pos, of: tourRanking(next).length });
+  }
   const before = c.tier;
   const season = c.season + 1;
-  next = { ...next, trophies };
+  next = restage({ ...next, trophies, season });
   return {
     ...next,
     season,

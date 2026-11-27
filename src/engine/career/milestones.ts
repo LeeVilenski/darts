@@ -1,14 +1,23 @@
 import { TIER_CAPS } from './attributes';
 import {
+  eligibility,
   eventById,
   grantCard,
   holdsCard,
+  ordinal,
   standings,
+  tourPosition,
   YOU,
   type CareerState,
   type EventResult,
 } from './career';
-import { CIRCUIT_INFO, roundNames } from './circuits';
+import {
+  CIRCUIT_INFO,
+  MAJOR_PLACES,
+  roundNames,
+  TOUR_CARD_KEEP,
+  WEEKS_PER_SEASON,
+} from './circuits';
 import { SENDERS, type Message, type Sender } from './story';
 
 /**
@@ -69,7 +78,7 @@ export function send(
 const RULES: Rule[] = [
   {
     key: () => 'first-win',
-    when: (c) => c.stats.wins >= 1,
+    when: (c) => c.stats.wins >= 1 && c.tier === 0,
     apply: (c) =>
       send(
         c,
@@ -86,8 +95,10 @@ const RULES: Rule[] = [
       return send(
         c,
         'reporter',
-        `Local winner: ${t.name}`,
-        `"${c.you} took the ${t.name} this week, and the regulars are already talking." A few lines in the Gazette, and a picture by the board. It's a start.`,
+        `First title: ${t.name}`,
+        t.circuit === 'pub'
+          ? `"${c.you} took the ${t.name} this week, and the regulars are already talking." A few lines in the Gazette, and a picture by the board. It's a start.`
+          : `"${c.you} won the ${t.name} this week." The first title of what could be quite a career.`,
       );
     },
   },
@@ -200,7 +211,101 @@ const RULES: Rule[] = [
         `Your season has earned you a free place at Q-School this week. The last four come away with a Tour Card; the quarter-finalists earn a Challenge Tour card.`,
       ),
   },
+
+  // The Pro Tour.
+  {
+    // Once per card won (a card regained after losing one is a new one).
+    key: (c) => `tour-card-${fired(c, 'card-lost-')}`,
+    when: (c) => c.cards.tour !== null,
+    apply: (c) =>
+      send(
+        c,
+        'tour',
+        'Welcome to the Pro Tour',
+        `Congratulations on your Tour Card, valid through season ${c.cards.tour}. Every Players Championship is open to you. The top ${MAJOR_PLACES} on the ranking go straight into the majors, and there are qualifiers for the rest. To keep the card, be inside the top ${TOUR_CARD_KEEP} when it runs out. Your attributes can now reach ${TIER_CAPS[3]}.`,
+      ),
+  },
+  {
+    key: (c) => {
+      const e = c.calendar.find((x) => x.kind === 'major' && !x.result && eligibility(c, x).ok);
+      return `major-in-${e?.id ?? 'none'}`;
+    },
+    when: (c) =>
+      holdsCard(c, 'tour') &&
+      c.calendar.some((x) => x.kind === 'major' && !x.result && eligibility(c, x).ok),
+    apply: (c) => {
+      const e = c.calendar.find((x) => x.kind === 'major' && !x.result && eligibility(c, x).ok)!;
+      const via = eligibility(c, e);
+      return send(
+        c,
+        'tour',
+        `You're in the ${e.name}`,
+        via.ok && via.via === 'invite'
+          ? `Through the qualifier and onto the stage: you have a place in the ${e.name} in week ${e.week}. ${e.field} players, the TV cameras, and a walk-on.`
+          : `Your ranking (${ordinal(tourPosition(c) ?? 0)}) puts you straight into the ${e.name} in week ${e.week}. ${e.field} players, the TV cameras, and a walk-on.`,
+      );
+    },
+  },
+  {
+    key: (c) => `card-danger-${c.season}`,
+    when: (c) =>
+      c.cards.tour === c.season && c.week >= 8 && (tourPosition(c) ?? Infinity) > TOUR_CARD_KEEP,
+    apply: (c) =>
+      send(
+        c,
+        'tour',
+        'Your Tour Card is at risk',
+        `Your card runs out at the end of this season and you're ${ordinal(tourPosition(c) ?? 0)} on the ranking. Get inside the top ${TOUR_CARD_KEEP} by week ${WEEKS_PER_SEASON - 1} or it's back to Q-School.`,
+      ),
+  },
+  {
+    key: (c) => `card-lost-${c.lastSeason?.season ?? 0}`,
+    when: (c) => !!c.lastSeason?.changes.some((x) => x.startsWith('Tour Card lost')),
+    apply: (c) =>
+      send(
+        c,
+        'tour',
+        'Your Tour Card has expired',
+        `You finished outside the top ${TOUR_CARD_KEEP}, so your card has gone. You keep your Challenge Tour card, and Q-School in week ${WEEKS_PER_SEASON} is the way back.`,
+      ),
+  },
+  {
+    key: (c) => `season-review-${c.lastSeason?.season ?? 0}`,
+    when: (c) => !!c.lastSeason,
+    apply: (c) => {
+      const s = c.lastSeason!;
+      const titles = c.trophies.filter((t) => t.season === s.season).map((t) => t.name);
+      const places = s.places
+        .map((p) => `${ordinal(p.position)} on the ${CIRCUIT_INFO[p.circuit].name}`)
+        .join(', ');
+      return send(
+        c,
+        'reporter',
+        `Season ${s.season} in review`,
+        [
+          places ? `${c.you} finished ${places}.` : `A quiet season for ${c.you}.`,
+          titles.length ? `Titles: ${titles.join(', ')}.` : '',
+          s.changes.length ? `${s.changes.join('. ')}.` : '',
+        ]
+          .filter(Boolean)
+          .join(' '),
+      );
+    },
+  },
+  {
+    key: () => 'first-major',
+    when: (c) => c.trophies.some((t) => SENDS_MAJOR.has(t.name)),
+    apply: (c) =>
+      send(
+        c,
+        'reporter',
+        'Major champion',
+        `From the Red Lion to a major title. ${c.you} is a name the whole sport knows now.`,
+      ),
+  },
 ];
+
+const SENDS_MAJOR = new Set(['Grand Prix', 'Matchplay', 'Masters', 'World Championship']);
 
 /** Run the rules until nothing more fires. */
 export function evaluate(c: CareerState): CareerState {

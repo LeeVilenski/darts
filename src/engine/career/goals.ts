@@ -7,7 +7,13 @@ import {
   YOU,
   type CareerState,
 } from './career';
-import { CIRCUIT_INFO, TOUR_CARD_KEEP, WEEKS_PER_SEASON, type CircuitId } from './circuits';
+import {
+  CIRCUIT_INFO,
+  MAJOR_PLACES,
+  TOUR_CARD_KEEP,
+  WEEKS_PER_SEASON,
+  type CircuitId,
+} from './circuits';
 
 export interface Goal {
   title: string;
@@ -48,18 +54,27 @@ export function goals(c: CareerState): Goal[] {
   const out: Goal[] = [];
   if (holdsCard(c, 'tour')) {
     const pos = tourPosition(c) ?? 999;
+    const expiring = c.cards.tour === c.season;
     out.push({
-      title: `Keep your Tour Card (top ${TOUR_CARD_KEEP})`,
-      detail: `You're ${ordinal(pos)} on the tour ranking. Card valid through season ${c.cards.tour}.`,
-      progress: pos <= TOUR_CARD_KEEP ? 1 : TOUR_CARD_KEEP / pos,
+      title: expiring
+        ? `Keep your Tour Card: top ${TOUR_CARD_KEEP} by season's end`
+        : `Build your ranking (card valid to season ${c.cards.tour})`,
+      detail: `You're ${ordinal(pos)} on the tour ranking.${
+        expiring
+          ? pos <= TOUR_CARD_KEEP
+            ? ' Inside the line: hold on.'
+            : ` Outside the line with ${weeksLeft(c)} weeks left.`
+          : ` Next season it has to be top ${TOUR_CARD_KEEP} to keep it.`
+      }`,
+      progress: Math.min(1, TOUR_CARD_KEEP / pos),
     });
     out.push({
-      title: 'Qualify for the majors (top 14)',
+      title: `The majors: top ${MAJOR_PLACES} go straight in`,
       detail:
-        pos <= 14
+        pos <= MAJOR_PLACES
           ? `You're ${ordinal(pos)}: in the majors automatically.`
           : `You're ${ordinal(pos)}. Reach a qualifier final to get in.`,
-      progress: Math.min(1, 14 / pos),
+      progress: Math.min(1, MAJOR_PLACES / pos),
     });
     return out;
   }
