@@ -19,7 +19,9 @@ import {
   type CareerState,
 } from '../engine/career/career';
 import { loadCareer } from '../engine/career/migrate';
-import { answerOffer, markRead, withStory } from '../engine/career/milestones';
+import { answerChoice, answerOffer, markRead, withStory } from '../engine/career/milestones';
+import { buyKit, plainKit, type KitItem } from '../engine/career/kit';
+import { SHIRTS, setLookOverride } from '../game/scene/appearance';
 import { MODE_DEFAULTS } from '../engine/modes/match';
 import { ASSIST } from '../engine/physics/throwModel';
 import { setCareerThrow, useGameStore, type MatchSetup } from './useGameStore';
@@ -60,6 +62,11 @@ interface CareerStore {
   /** Accept or decline an offer in a message. */
   answer(messageId: string, accept: boolean): void;
   read(messageId: string): void;
+  /** Pick an option in a message (a nickname). */
+  choose(messageId: string, option: string): void;
+  /** Buy (or wear, if owned) a kit item. */
+  buy(item: KitItem): void;
+  plainKit(): void;
   /** Start your next match. */
   play(): void;
   /** Start a training session for an attribute. */
@@ -98,6 +105,15 @@ export const useCareer = create<CareerStore>((set, get) => ({
   answer(id, accept) {
     act((c) => answerOffer(c, id, accept));
   },
+  choose(id, option) {
+    act((c) => answerChoice(c, id, option));
+  },
+  buy(item) {
+    act((c) => buyKit(c, item));
+  },
+  plainKit() {
+    act(plainKit);
+  },
   read(id) {
     act((c) => markRead(c, id));
   },
@@ -112,6 +128,7 @@ export const useCareer = create<CareerStore>((set, get) => ({
       players: [{ name: c.you }, { name: next.opponent.name, ai: next.opponent.level }],
       bullUp: true,
       career: true,
+      venue: next.event.venue,
     });
   },
   train(attr) {
@@ -138,6 +155,22 @@ export const useCareer = create<CareerStore>((set, get) => ({
     update(null);
   },
 }));
+
+/** Your kit and nickname, on your player at the oche and on the scoreboard. */
+function applyLook(c: CareerState | null, prev: CareerState | null) {
+  if (prev && prev.you !== c?.you) setLookOverride(prev.you, null);
+  if (!c) return;
+  const patch: Parameters<typeof setLookOverride>[1] = {};
+  const shirt = c.kit.shirt !== null ? SHIRTS[c.kit.shirt] : undefined;
+  if (shirt) [patch.shirt, patch.trim] = shirt;
+  if (c.kit.pattern) patch.pattern = c.kit.pattern;
+  if (c.nickname) patch.backName = c.nickname.toUpperCase();
+  setLookOverride(c.you, Object.keys(patch).length ? patch : null);
+}
+applyLook(useCareer.getState().career, null);
+useCareer.subscribe((s, prev) => {
+  if (s.career !== prev.career) applyLook(s.career, prev.career);
+});
 
 // Your attributes shape your throw in career matches and training.
 setCareerThrow(

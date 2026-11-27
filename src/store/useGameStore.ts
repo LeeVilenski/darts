@@ -37,6 +37,7 @@ import {
 import { createRng, type Rng } from '../engine/rng';
 import { pressureFor } from '../engine/ai/pressure';
 import type { Attr } from '../engine/career/attributes';
+import type { Venue } from '../engine/career/circuits';
 
 export const DARTS_PER_TURN = 3;
 
@@ -86,6 +87,8 @@ interface MatchExtras {
   career?: boolean;
   /** A career training session working this attribute. */
   training?: Attr;
+  /** Where it's played (career events): the pub, a county hall, a floor event, the TV stage. */
+  venue?: Venue;
 }
 
 /** A match of mode M: its options plus the players. */

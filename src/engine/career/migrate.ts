@@ -9,6 +9,7 @@ import {
 } from './career';
 import { CIRCUITS } from './circuits';
 import { emptyCareerStats, type CareerStats } from './stats';
+import { emptyKit } from './story';
 
 /** The parts of a version-1 save that carry over. */
 interface CareerV1 {
@@ -94,6 +95,9 @@ export function loadCareer(raw: unknown): CareerState | null {
       ...v2,
       reputation: v2.reputation ?? 0,
       inbox: v2.inbox ?? [],
+      spent: v2.spent ?? 0,
+      nickname: v2.nickname ?? null,
+      kit: v2.kit ?? emptyKit(),
       milestones: v2.milestones ?? [],
     };
   }

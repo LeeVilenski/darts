@@ -1887,3 +1887,68 @@ input {
 .message header > .muted {
   white-space: nowrap;
 }
+
+/* ---------- career flavour ---------- */
+.chip.rival {
+  margin-left: 6px;
+  vertical-align: middle;
+  background: rgba(255, 77, 94, 0.2);
+  color: #ff9aa4;
+  font-family: system-ui, sans-serif;
+}
+.profile-head-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.msg-actions.wrap {
+  flex-wrap: wrap;
+}
+.swatches {
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  gap: 8px;
+}
+.swatch {
+  appearance: none;
+  aspect-ratio: 1;
+  border-radius: 10px;
+  border: 4px solid;
+  cursor: pointer;
+  display: grid;
+  place-items: center;
+  padding: 0;
+}
+.swatch.on {
+  outline: 3px solid var(--c-accent);
+  outline-offset: 2px;
+}
+.swatch:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+.swatch .price {
+  font-size: 10px;
+  font-weight: 800;
+  padding: 1px 3px;
+  border-radius: 4px;
+  background: rgba(0, 0, 0, 0.6);
+  color: #fff;
+}
+.pattern-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.pattern-row .chip {
+  appearance: none;
+  border: 0;
+  cursor: pointer;
+  font: inherit;
+  font-size: 12px;
+  text-transform: capitalize;
+}
+.pattern-row .chip:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}

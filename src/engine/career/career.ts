@@ -40,7 +40,7 @@ import {
   type EventTemplate,
 } from './circuits';
 import { quickMatch } from './quickSim';
-import { eventRep, matchRep, type Message } from './story';
+import { emptyKit, eventRep, matchRep, type Kit, type Message } from './story';
 import { addMatch, emptyCareerStats, type CareerStats, type MatchSummary } from './stats';
 
 export type { BracketMatch } from './bracket';
@@ -155,6 +155,21 @@ export interface CareerState {
   inbox: Message[];
   /** Story milestones that have fired (see milestones.ts). */
   milestones: string[];
+  /** Money spent (entry fees, kit): your balance is earnings − spent. */
+  spent: number;
+  /** The nickname you chose, once the press gave you one. */
+  nickname: string | null;
+  kit: Kit;
+}
+
+/** Money you have to spend. */
+export const balance = (c: CareerState) => c.earnings - c.spent;
+
+/** "Sam "The Natural" Rowe" once you have a nickname. */
+export function displayName(c: CareerState): string {
+  if (!c.nickname) return c.you;
+  const [first, ...rest] = c.you.split(' ');
+  return rest.length ? `${first} "${c.nickname}" ${rest.join(' ')}` : `${c.you} "${c.nickname}"`;
 }
 
 // Fictional names only.
@@ -336,6 +351,9 @@ export function newCareer(you: string, seed: number): CareerState {
     reputation: 0,
     inbox: [],
     milestones: [],
+    spent: 0,
+    nickname: null,
+    kit: emptyKit(),
   };
 }
 
@@ -412,9 +430,12 @@ export function eligibility(c: CareerState, e: CalEvent): Eligibility {
         ? { ok: false, reason: 'Pub events are for amateurs' }
         : { ok: true };
     case 'card':
-      return holdsCard(c, entry.card)
-        ? { ok: true }
-        : { ok: false, reason: `Needs ${CARD_NAMES[entry.card]}` };
+      if (!holdsCard(c, entry.card))
+        return { ok: false, reason: `Needs ${CARD_NAMES[entry.card]}` };
+      if (!e.fee) return { ok: true };
+      return balance(c) >= e.fee
+        ? { ok: true, via: 'fee' }
+        : { ok: false, reason: `Entry fee £${e.fee} (you have £${balance(c)})` };
     case 'meritTop': {
       if (entry.card && !holdsCard(c, entry.card))
         return { ok: false, reason: `Needs ${CARD_NAMES[entry.card]}` };
@@ -438,9 +459,9 @@ export function eligibility(c: CareerState, e: CalEvent): Eligibility {
       if (holdsCard(c, 'tour')) return { ok: false, reason: 'You already hold a Tour Card' };
       if (c.qschoolPlace) return { ok: true };
       if (!c.cards.county) return { ok: false, reason: 'Needs a Q-School place or a County card' };
-      return c.earnings >= QSCHOOL_FEE
+      return balance(c) >= QSCHOOL_FEE
         ? { ok: true, via: 'fee' }
-        : { ok: false, reason: `Entry fee £${QSCHOOL_FEE} (you have £${c.earnings})` };
+        : { ok: false, reason: `Entry fee £${QSCHOOL_FEE} (you have £${balance(c)})` };
   }
 }
 
@@ -537,7 +558,7 @@ export function enterEvent(c: CareerState, id: string): CareerState {
   const field = withYouSeeded(c, e, fieldFor(c, e, true));
   return {
     ...c,
-    earnings: ok.via === 'fee' ? c.earnings - (e.fee ?? 0) : c.earnings,
+    spent: ok.via === 'fee' ? c.spent + (e.fee ?? 0) : c.spent,
     invites: c.invites.filter((x) => x !== id),
     event: { id, rounds: [drawBracket(field)] },
   };

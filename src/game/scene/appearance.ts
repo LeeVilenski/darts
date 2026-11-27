@@ -105,8 +105,21 @@ function picker(seed: number) {
   };
 }
 
+/**
+ * Looks set from outside (your career kit and nickname), by player name. They
+ * win over the look derived from the name.
+ */
+const overrides = new Map<string, Partial<Appearance>>();
+const keyOf = (name: string) => name.trim().toLowerCase();
+export function setLookOverride(name: string, patch: Partial<Appearance> | null) {
+  if (patch) overrides.set(keyOf(name), patch);
+  else overrides.delete(keyOf(name));
+}
+
 /** `Gus "The Hammer" Marlow` → `THE HAMMER`; `Lena Varley` → `VARLEY`; `Player 1` → `PLAYER 1`. */
 export function backNameFor(name: string): string {
+  const set = overrides.get(keyOf(name))?.backName;
+  if (set) return set;
   const nick = /"([^"]+)"/.exec(name)?.[1];
   if (nick) return nick.toUpperCase();
   const words = name.trim().split(/\s+/);
@@ -137,5 +150,6 @@ export function appearanceFor(name: string): Appearance {
     girth,
     belly: girth > 1.1 ? r.range(0.01, 0.045) : r.range(0, 0.012),
     backName: backNameFor(name),
+    ...overrides.get(keyOf(name)),
   };
 }

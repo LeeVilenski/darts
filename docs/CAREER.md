@@ -1,6 +1,6 @@
 # Career mode v2: plan
 
-Status: agreed. Phases 1–5 are built (hub, attributes, calendar and circuits, reputation and inbox, the pro game).
+Status: built. All six phases are in (see [What shipped](#what-shipped) for where it differs from the plan).
 
 ## Where we are
 
@@ -255,3 +255,32 @@ Each phase ships on its own and leaves the game playable.
 - **Stakes:** Tour Cards can be lost. County status is kept.
 - **Saves:** existing careers are migrated. Old saves start with attributes at the level of their
   current tier.
+
+## What shipped
+
+All six phases are built. Where the result differs from the plan above:
+
+- **Training** is one session per week, alongside that week's event. It doesn't use up the week.
+- **Entry fees:** pub events are free, County Opens cost £25, Challenge Tour opens £100, and
+  Q-School £500 without a place. Wildcards and invitations are free. Kit is cosmetic: 12 shirts
+  (£150 each) and 6 patterns (£400 each). Your balance is earnings minus spending.
+- **Tour Card:** valid for two seasons. When it runs out you keep it only inside the top 48 (the
+  tour has 63 regulars). The tour ranking is seeded with a season-0 of money, so it has shape
+  from the start.
+- **Ways up, all of them firm:**
+  - **County card:** win a match at a County event (through a wildcard), or finish top 2 on the
+    Pub League.
+  - **Challenge card:** reach a Challenge Tour quarter-final (through an invitation), finish top 2
+    on the County merit, or reach a Q-School quarter-final.
+  - **Tour Card:** reach the Q-School semi-finals, or finish top 2 on the Challenge merit.
+  - **Majors:** top 14 on the ranking, or reach a qualifier final.
+- **Simulation:** AI-only matches use `quickSim` (lognormal darts-per-leg per level, fitted to the
+  physics and checked by a test). Your own matches are real.
+- **Not built:** flight colours (every dart shares one material), walk-on music, and AI players
+  moving between circuits.
+
+Code: `engine/career/` holds `career.ts` (state, weeks, events, seasons), `circuits.ts` (the
+calendar as data), `attributes.ts`, `milestones.ts` and `story.ts` (rules, messages,
+reputation), `bracket.ts`, `quickSim.ts`, `goals.ts`, `kit.ts`, `stats.ts` and `migrate.ts`. The UI
+lives in `ui/career/`. Venues are styled in `game/scene/Room.tsx`, and your kit and nickname
+reach the scene through `setLookOverride` in `appearance.ts`.

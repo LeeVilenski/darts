@@ -158,7 +158,7 @@ describe('seasons and cards', () => {
     const q = weekEvents(c).find((e) => e.kind === 'qschool')!;
     expect(eligibility(c, q)).toEqual({ ok: true, via: 'fee' });
     c = enterEvent(c, q.id);
-    expect(c.earnings).toBe(500);
+    expect(c.spent).toBe(500);
     for (let i = 0; i < 3; i++) c = win(c); // to the semi-final
     c = lose(c);
     expect(c.season).toBe(2);

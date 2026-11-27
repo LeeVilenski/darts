@@ -14,7 +14,35 @@ export interface Message {
   read: boolean;
   /** An offer to accept or decline: a place in an event. */
   offer?: { eventId: string; state: 'open' | 'accepted' | 'declined' };
+  /** A choice to make (e.g. a nickname). */
+  choice?: { kind: 'nickname'; options: string[]; picked: string | null };
 }
+
+/** Nicknames the press might give you (none clash with the roster's). */
+export const YOUR_NICKNAMES = [
+  'The Natural',
+  'Hotshot',
+  'The Sniper',
+  'Iceman',
+  'The Machine',
+  'Doublestar',
+  'The Kid',
+  'Silk',
+  'The Surgeon',
+  'Wildcard',
+];
+
+/** Kit you can buy with your winnings: shirts (index into the shirt palette) and patterns. */
+export const KIT_PRICES = { shirt: 150, pattern: 400 } as const;
+export const KIT_PATTERNS = ['panels', 'band', 'chevron', 'flames', 'split', 'pinstripe'] as const;
+export type KitPattern = (typeof KIT_PATTERNS)[number];
+export interface Kit {
+  shirt: number | null;
+  pattern: KitPattern | null;
+  /** Items bought: "shirt:3", "pattern:flames". */
+  owned: string[];
+}
+export const emptyKit = (): Kit => ({ shirt: null, pattern: null, owned: [] });
 
 export type Sender = 'landlord' | 'secretary' | 'reporter' | 'challenge' | 'tour' | 'coach';
 

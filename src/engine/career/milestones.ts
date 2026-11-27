@@ -2,6 +2,7 @@ import { TIER_CAPS } from './attributes';
 import {
   eligibility,
   eventById,
+  mix,
   grantCard,
   holdsCard,
   ordinal,
@@ -18,7 +19,7 @@ import {
   TOUR_CARD_KEEP,
   WEEKS_PER_SEASON,
 } from './circuits';
-import { SENDERS, type Message, type Sender } from './story';
+import { SENDERS, YOUR_NICKNAMES, type Message, type Sender } from './story';
 
 /**
  * Milestones: rules over the career state that fire once each, opening doors
@@ -61,6 +62,7 @@ export function send(
   subject: string,
   body: string,
   offer?: Message['offer'],
+  choice?: Message['choice'],
 ): CareerState {
   const msg: Message = {
     id: `m${c.inbox.length + 1}-${c.season}-${c.week}`,
@@ -71,6 +73,7 @@ export function send(
     body,
     read: false,
     offer,
+    choice,
   };
   return { ...c, inbox: [...c.inbox, msg] };
 }
@@ -303,7 +306,64 @@ const RULES: Rule[] = [
         `From the Red Lion to a major title. ${c.you} is a name the whole sport knows now.`,
       ),
   },
+
+  // Rivals and nicknames.
+  {
+    key: (c) => `rival-${rivalOf(c)?.id ?? 'none'}`,
+    when: (c) => rivalOf(c) !== null,
+    apply: (c) => {
+      const r = rivalOf(c)!;
+      return send(
+        c,
+        'reporter',
+        `A rivalry: ${r.name}`,
+        `${r.name} has now beaten ${c.you} ${r.losses} time${r.losses === 1 ? '' : 's'} (${r.wins}–${r.losses} head to head). Every time these two are drawn together, people will be watching.`,
+      );
+    },
+  },
+  {
+    key: () => 'nickname',
+    when: (c) => c.reputation >= 250 && !c.nickname,
+    apply: (c) => {
+      const options = pickNicknames(c);
+      return send(
+        c,
+        'reporter',
+        'What should we call you?',
+        `You're getting a name for yourself, and every player needs a nickname for the walk-on. We've three suggestions from the readers: pick one and it goes on the back of your shirt.`,
+        undefined,
+        { kind: 'nickname', options, picked: null },
+      );
+    },
+  },
 ];
+
+/** Three nicknames for you, seeded, that nobody on the roster already has. */
+function pickNicknames(c: CareerState): string[] {
+  const taken = new Set(c.roster.map((p) => /"([^"]+)"/.exec(p.name)?.[1]));
+  const free = YOUR_NICKNAMES.filter((n) => !taken.has(n));
+  const out: string[] = [];
+  let h = mix(c.seed, 99);
+  while (out.length < 3 && free.length) {
+    h = mix(h, out.length);
+    out.push(free.splice(h % free.length, 1)[0]!);
+  }
+  return out;
+}
+
+/** The player who has beaten you most (at least twice, and more than you've beaten them). */
+export function rivalOf(
+  c: CareerState,
+): { id: string; name: string; wins: number; losses: number } | null {
+  let best: { id: string; name: string; wins: number; losses: number } | null = null;
+  for (const [id, [wins, losses]] of Object.entries(c.stats.h2h)) {
+    if (losses < 2 || losses <= wins) continue;
+    const p = c.roster.find((x) => x.id === id);
+    if (!p) continue;
+    if (!best || losses > best.losses) best = { id, name: p.name, wins, losses };
+  }
+  return best;
+}
 
 const SENDS_MAJOR = new Set(['Grand Prix', 'Matchplay', 'Masters', 'World Championship']);
 
@@ -339,6 +399,19 @@ export function answerOffer(c: CareerState, messageId: string, accept: boolean):
     ...c,
     inbox,
     invites: accept ? [...c.invites, msg.offer.eventId] : c.invites,
+  };
+}
+
+/** Pick an option in a message's choice (a nickname). */
+export function answerChoice(c: CareerState, messageId: string, option: string): CareerState {
+  const msg = c.inbox.find((m) => m.id === messageId);
+  if (!msg?.choice || msg.choice.picked || !msg.choice.options.includes(option)) return c;
+  return {
+    ...c,
+    nickname: msg.choice.kind === 'nickname' ? option : c.nickname,
+    inbox: c.inbox.map((m) =>
+      m.id === messageId ? { ...m, read: true, choice: { ...m.choice!, picked: option } } : m,
+    ),
   };
 }
 

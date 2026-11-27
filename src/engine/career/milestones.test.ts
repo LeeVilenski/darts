@@ -108,3 +108,54 @@ describe('the story: the pro game', () => {
     expect(kept.lastSeason!.changes[0]).toMatch(/^Tour Card kept/);
   });
 });
+
+describe('flavour: rivals, nicknames, kit and fees', () => {
+  it('losing twice to the same player makes them your rival', async () => {
+    const { rivalOf } = await import('./milestones');
+    let c = newCareer('Sam', 4);
+    c = { ...c, stats: { ...c.stats, h2h: { p3: [0, 2], p5: [3, 2] } } };
+    expect(rivalOf(c)).toMatchObject({ id: 'p3', losses: 2 });
+    c = evaluate(c);
+    expect(c.inbox.some((m) => m.subject.startsWith('A rivalry'))).toBe(true);
+  });
+
+  it('the press offer three nicknames; you pick one', async () => {
+    const { answerChoice } = await import('./milestones');
+    const { displayName } = await import('./career');
+    let c = evaluate({ ...newCareer('Sam Rowe', 4), reputation: 260 });
+    const msg = c.inbox.find((m) => m.choice)!;
+    expect(msg.choice!.options).toHaveLength(3);
+    c = answerChoice(c, msg.id, msg.choice!.options[1]!);
+    expect(c.nickname).toBe(msg.choice!.options[1]);
+    expect(displayName(c)).toBe(`Sam "${c.nickname}" Rowe`);
+    expect(answerChoice(c, msg.id, msg.choice!.options[0]!)).toBe(c);
+  });
+
+  it('kit costs money from your balance, and stays yours', async () => {
+    const { buyKit, owns } = await import('./kit');
+    const { balance } = await import('./career');
+    let c = { ...newCareer('Sam', 4), earnings: 200 };
+    c = buyKit(c, { kind: 'shirt', index: 2 });
+    expect(balance(c)).toBe(50);
+    expect(c.kit.shirt).toBe(2);
+    expect(buyKit(c, { kind: 'pattern', pattern: 'flames' })).toBe(c); // can't afford
+    c = buyKit({ ...c, kit: { ...c.kit, shirt: null } }, { kind: 'shirt', index: 2 });
+    expect(balance(c)).toBe(50); // owned: free to wear again
+    expect(owns(c, { kind: 'shirt', index: 2 })).toBe(true);
+  });
+
+  it('county opens charge an entry fee', async () => {
+    const { grantCard } = await import('./career');
+    let c = grantCard(newCareer('Sam', 4), 'county');
+    while (c.week < 3) c = skipWeek(c);
+    const open = weekEvents(c).find((e) => e.circuit === 'county')!;
+    expect(eligibility(c, open)).toMatchObject({
+      ok: false,
+      reason: 'Entry fee £25 (you have £0)',
+    });
+    c = { ...c, earnings: 30 };
+    expect(eligibility(c, open)).toEqual({ ok: true, via: 'fee' });
+    c = enterEvent(c, open.id);
+    expect(c.spent).toBe(25);
+  });
+});

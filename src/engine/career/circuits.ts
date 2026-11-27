@@ -145,6 +145,7 @@ const county = (slug: string, week: number, name: string): EventTemplate => ({
   prize: 500,
   entry: { kind: 'card', card: 'county' },
   venue: 'hall',
+  fee: 25,
 });
 const challenge = (slug: string, week: number, name: string): EventTemplate => ({
   slug,
@@ -157,6 +158,7 @@ const challenge = (slug: string, week: number, name: string): EventTemplate => (
   prize: 2500,
   entry: { kind: 'card', card: 'challenge' },
   venue: 'floor',
+  fee: 100,
 });
 const pc = (n: number, week: number): EventTemplate => ({
   slug: `pc${n}`,
@@ -230,6 +232,7 @@ export const SEASON: EventTemplate[] = [
   {
     ...county('county-champs', 12, 'County Championship'),
     kind: 'finals',
+    fee: undefined,
     prize: 1500,
     entry: { kind: 'meritTop', circuit: 'county', top: 16, card: 'county' },
   },
@@ -242,6 +245,7 @@ export const SEASON: EventTemplate[] = [
   {
     ...challenge('challenge-finals', 12, 'Challenge Tour Finals'),
     kind: 'finals',
+    fee: undefined,
     prize: 6000,
     entry: { kind: 'meritTop', circuit: 'challenge', top: 16, card: 'challenge' },
   },

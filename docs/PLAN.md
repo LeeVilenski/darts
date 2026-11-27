@@ -286,8 +286,9 @@ Next step: **M0 → M1**.
   (`engine/modes/*.ts`), dispatched in `match.ts`; round-based ones share `rounds.ts` (seat order,
   skipping eliminated/finished players, tie-breaks). Cut-throat is a Cricket option. Each has an AI
   target in `strategy.ts`, and `modes.test.ts` plays every mode to a finish with AI players.
-- **Career** (`engine/career/`). Pure and seeded: a fictional 48-player roster over four tiers,
-  8-player knockouts per event, order-of-merit points, promotion for the top 2, trophies and
-  earnings. AI-only matches are simulated headlessly with `simulateMatch` (same throw model,
-  collisions and nerves). `store/useCareer.ts` persists it and records your result when a career
-  match ends.
+- **Career** (`engine/career/`). Pure and seeded. A 13-week season calendar runs across four
+  circuits (pub, county, Challenge Tour, Pro Tour), with cards, Q-School, majors and qualifiers.
+  On top of that sit RPG throwing attributes (Scoring, Finishing, Nerve, Rhythm) that scale the
+  throw in career matches, and a story layer of reputation, milestones and an inbox with wildcards
+  and invitations. AI-only matches use `quickSim`. `store/useCareer.ts` persists the career and
+  records your matches and training. Full design and notes: [CAREER.md](CAREER.md).

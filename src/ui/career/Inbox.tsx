@@ -20,6 +20,7 @@ export function InboxTab({ c }: { c: CareerState }) {
 export function MessageCard({ c, m, compact }: { c: CareerState; m: Message; compact?: boolean }) {
   const answer = useCareer((s) => s.answer);
   const read = useCareer((s) => s.read);
+  const choose = useCareer((s) => s.choose);
   const who = senderOf(m);
   const offer = m.offer;
   const event = offer ? eventById(c, offer.eventId) : null;
@@ -27,7 +28,7 @@ export function MessageCard({ c, m, compact }: { c: CareerState; m: Message; com
   return (
     <article
       className={`hub-card message ${m.read ? 'read' : 'unread'}`}
-      onClick={() => !m.read && !offer && read(m.id)}
+      onClick={() => !m.read && !offer && !m.choice && read(m.id)}
       data-testid="message"
     >
       <header>
@@ -66,6 +67,24 @@ export function MessageCard({ c, m, compact }: { c: CareerState; m: Message; com
         </span>
       )}
       {offer && offer.state === 'open' && expired && <span className="chip">Expired</span>}
+      {m.choice &&
+        (m.choice.picked ? (
+          <span className="chip gold">You chose “{m.choice.picked}”</span>
+        ) : (
+          <div className="msg-actions wrap">
+            {m.choice.options.map((o) => (
+              <button
+                key={o}
+                type="button"
+                className="primary-btn small"
+                onClick={() => choose(m.id, o)}
+                data-testid="choose-option"
+              >
+                {o}
+              </button>
+            ))}
+          </div>
+        ))}
     </article>
   );
 }

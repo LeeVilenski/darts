@@ -2,7 +2,9 @@ import { useState } from 'react';
 import { describePersonality, personalityFor } from '../../engine/ai/personality';
 import { AI_SKILL } from '../../engine/ai/skill';
 import {
+  balance,
   describeReached,
+  displayName,
   eligibility,
   eventById,
   holdsCard,
@@ -39,7 +41,8 @@ import { Icon } from '../icons';
 import { Segmented } from '../Segmented';
 import { AttributePanel, RatingsLine, TrainingCard } from './Attributes';
 import { InboxTab, MessageCard, Reputation } from './Inbox';
-import { unread } from '../../engine/career/milestones';
+import { rivalOf, unread } from '../../engine/career/milestones';
+import { KitShop } from './Kit';
 
 type Tab = 'home' | 'calendar' | 'rankings' | 'inbox' | 'profile';
 const TABS: { id: Tab; label: string }[] = [
@@ -73,14 +76,18 @@ export function CareerHub() {
           <Icon name="back" />
         </button>
         <div className="hub-title">
-          <h2>{career ? career.you : 'Career'}</h2>
+          <h2>{career ? displayName(career) : 'Career'}</h2>
           {career && (
             <span className="hub-sub">
               {STAGE_NAMES[career.tier]} · Season {career.season} · Week {career.week}
             </span>
           )}
         </div>
-        {career && <span className="hub-money">{money(career.earnings)}</span>}
+        {career && (
+          <span className="hub-money" title="Money to spend">
+            {money(balance(career))}
+          </span>
+        )}
       </header>
 
       {career ? (
@@ -332,8 +339,15 @@ function Fixture({ c }: { c: CareerState }) {
         <PlayerBadge name={next.opponent.name} />
       </div>
       <div className="fixture-names">
-        <span className="you">{c.you}</span>
-        <span>{next.opponent.name}</span>
+        <span className="you">{displayName(c)}</span>
+        <span>
+          {next.opponent.name}
+          {rivalOf(c)?.id === next.opponent.id && (
+            <span className="chip rival" data-testid="rival">
+              Rival
+            </span>
+          )}
+        </span>
       </div>
       <dl className="fixture-facts">
         <div>
@@ -623,9 +637,10 @@ function ProfileTab({ c }: { c: CareerState }) {
       <div className="hub-card profile-head">
         <PlayerBadge name={c.you} size={64} />
         <div>
-          <div className="big">{c.you}</div>
+          <div className="big">{displayName(c)}</div>
           <div className="muted small">
-            {STAGE_NAMES[c.tier]} · season {c.season} · {money(c.earnings)} won
+            {STAGE_NAMES[c.tier]} · season {c.season} · {money(c.earnings)} won ·{' '}
+            {money(balance(c))} in the bank
           </div>
           <div className="card-badges">
             {cards.length ? (
@@ -643,6 +658,8 @@ function ProfileTab({ c }: { c: CareerState }) {
 
       <Reputation c={c} />
       <AttributePanel c={c} />
+      <RivalCard c={c} />
+      <KitShop c={c} />
 
       <h3>Career stats</h3>
       <div className="stat-grid">
@@ -726,6 +743,25 @@ function ProfileTab({ c }: { c: CareerState }) {
         </button>
       )}
     </>
+  );
+}
+
+function RivalCard({ c }: { c: CareerState }) {
+  const r = rivalOf(c);
+  if (!r) return null;
+  return (
+    <div className="hub-card rival-card">
+      <div className="eyebrow">Your rival</div>
+      <div className="profile-head-row">
+        <PlayerBadge name={r.name} size={44} />
+        <div>
+          <b>{r.name}</b>
+          <div className="muted small">
+            {r.wins}–{r.losses} head to head
+          </div>
+        </div>
+      </div>
+    </div>
   );
 }
 
