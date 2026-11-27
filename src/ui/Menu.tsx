@@ -1,13 +1,15 @@
 import { useEffect, useState, type ReactNode } from 'react';
 import { AI_SKILL } from '../engine/ai/skill';
-import { EVENTS_PER_SEASON, TIERS } from '../engine/career/tiers';
+import { WEEKS_PER_SEASON } from '../engine/career/circuits';
+import { STAGE_NAMES } from './career/CareerHub';
+import { unread } from '../engine/career/milestones';
 import { ASSIST } from '../engine/physics/throwModel';
 import { lifetimeAverage } from '../engine/stats/lifetime';
 import { useLifetimeStats } from '../store/lifetimeStats';
 import { useCareer } from '../store/useCareer';
 import { useGameStore, type GameSetup } from '../store/useGameStore';
 import { AccountPanel } from './AccountPanel';
-import { CareerSheet } from './CareerSheet';
+import { CareerHub } from './career/CareerHub';
 import { Icon, type IconName } from './icons';
 import { MODE_NAMES } from './modeView';
 import { PlaySetup, type GameKind } from './PlaySetup';
@@ -27,8 +29,13 @@ export function Menu() {
   const close = () => setSheet(null);
 
   return (
-    <div className={`menu ${view.screen === 'home' ? 'menu-home' : ''}`} data-testid="menu">
-      {view.screen === 'home' ? (
+    <div
+      className={`menu ${view.screen === 'home' && !careerOpen ? 'menu-home' : ''}`}
+      data-testid="menu"
+    >
+      {careerOpen ? (
+        <CareerHub />
+      ) : view.screen === 'home' ? (
         <Home onPlay={(kind) => setView({ screen: 'play', kind })} onSheet={setSheet} />
       ) : (
         <PlaySetup initialKind={view.kind} onBack={() => setView({ screen: 'home' })} />
@@ -43,7 +50,6 @@ export function Menu() {
       )}
       {sheet === 'player' && <PlayerSheet onClose={close} />}
       {sheet === 'help' && <HelpSheet onClose={close} />}
-      {careerOpen && <CareerSheet />}
     </div>
   );
 }
@@ -297,8 +303,8 @@ function HelpSheet({ onClose }: { onClose(): void }) {
           catch it in the back of another — a Robin Hood.
         </li>
         <li>
-          <b>Career:</b> win events to climb the order of merit; the top two each season move up a
-          tier, from the Pub League to the Pro Tour.
+          <b>Career:</b> start down the pub and earn your way up: County and Challenge Tour cards,
+          Q-School and a Tour Card. Your throwing improves as you play and train.
         </li>
       </ul>
       <button
@@ -350,5 +356,6 @@ export function describeSetup(setup: GameSetup): string {
 
 function careerSubtitle(c: ReturnType<typeof useCareer.getState>['career']): string {
   if (!c) return 'Pub to Pro Tour';
-  return `${TIERS[c.tier]!.name} · ${c.eventIndex + 1}/${EVENTS_PER_SEASON}`;
+  const n = unread(c);
+  return `${STAGE_NAMES[c.tier]} · week ${c.week}/${WEEKS_PER_SEASON}${n ? ` · ${n} new` : ''}`;
 }

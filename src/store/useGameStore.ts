@@ -30,10 +30,14 @@ import { resolveDart, stuckDartOf } from '../engine/physics/resolveDart';
 import {
   computeLaunch,
   type AssistLevel,
+  type AssistTuning,
   type FlickMetrics,
   type LaunchParams,
 } from '../engine/physics/throwModel';
 import { createRng, type Rng } from '../engine/rng';
+import { pressureFor } from '../engine/ai/pressure';
+import type { Attr } from '../engine/career/attributes';
+import type { Venue } from '../engine/career/circuits';
 
 export const DARTS_PER_TURN = 3;
 
@@ -46,6 +50,8 @@ export interface ThrownDart {
   collision: Collision | null;
   /** True once the flight animation reached the board/floor. */
   landed: boolean;
+  /** Your dart (not the AI's): what you went for, for career XP. */
+  intent?: { aim: { x: number; y: number }; pressure: number; unsteadiness: number };
 }
 
 /**
@@ -79,6 +85,10 @@ interface MatchExtras {
   bullUp?: boolean;
   /** A career match: player 0 is you; the result goes to the career. */
   career?: boolean;
+  /** A career training session working this attribute. */
+  training?: Attr;
+  /** Where it's played (career events): the pub, a county hall, a floor event, the TV stage. */
+  venue?: Venue;
 }
 
 /** A match of mode M: its options plus the players. */
@@ -299,7 +309,14 @@ export const useGameStore = create<GameState>((set, get) => ({
     // Under pressure the aim sways: the dart goes where it is at the moment of release.
     const off = aimSway?.() ?? { x: 0, y: 0 };
     const swayed = { x: aim.x + off.x, y: aim.y + off.y };
-    launchDart(swayed, computeLaunch(swayed, flick, s.assist, rng));
+    const pressure = s.match && s.nerves && !s.bullUp ? pressureFor(s.match) : 0;
+    const career = s.setup.kind !== 'practice' && (s.setup.career || s.setup.training);
+    const tuning = (career && careerThrow?.(swayed, pressure, rng)) || s.assist;
+    launchDart(swayed, computeLaunch(swayed, flick, tuning, rng), {
+      aim,
+      pressure,
+      unsteadiness: flick.unsteadiness,
+    });
   },
 
   aiThrow() {
@@ -437,14 +454,36 @@ export function stuckDarts(darts: ThrownDart[]): StuckDart[] {
  * Fly a launched dart: precompute its flight and result (including any
  * collision with darts already in the board), then animate it.
  */
-function launchDart(aim: { x: number; y: number }, launch: LaunchParams) {
+function launchDart(
+  aim: { x: number; y: number },
+  launch: LaunchParams,
+  intent?: ThrownDart['intent'],
+) {
   const s = useGameStore.getState();
   const { flight, result, collision } = resolveDart(launch, stuckDarts(s.darts), rng, s.bounce);
   useGameStore.setState({
     phase: 'flight',
     aim,
-    darts: [...s.darts, { id: nextId++, launch, flight, result, collision, landed: false }],
+    darts: [...s.darts, { id: nextId++, launch, flight, result, collision, landed: false, intent }],
   });
+}
+
+/**
+ * Career throwing: your attributes adjust the throw in career matches and
+ * training (set by the career store, so this store doesn't depend on it).
+ */
+let careerThrow:
+  ((aim: { x: number; y: number }, pressure: number, rng: Rng) => AssistTuning | null) | null =
+  null;
+let careerSway: (() => number) | null = null;
+export function setCareerThrow(throwFn: typeof careerThrow, swayFn: typeof careerSway) {
+  careerThrow = throwFn;
+  careerSway = swayFn;
+}
+/** How much your Nerve scales the pressure sway in this game (1 outside the career). */
+export function careerSwayScale(s: Pick<GameState, 'setup'>): number {
+  const career = s.setup.kind !== 'practice' && (s.setup.career || s.setup.training);
+  return (career && careerSway?.()) || 1;
 }
 
 /** Live pressure-sway offset (board mm) for the player's aim, set by the game layer. */

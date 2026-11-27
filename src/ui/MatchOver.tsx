@@ -2,9 +2,10 @@ import { marksPerRound } from '../engine/modes/cricket';
 import type { MatchState } from '../engine/modes/match';
 import { playsSets } from '../engine/modes/types';
 import { threeDartAverage } from '../engine/modes/x01';
-import { nextMatch } from '../engine/career/career';
-import { ROUND_NAMES } from '../engine/career/tiers';
+import { describeReached, nextMatch } from '../engine/career/career';
 import { useCareer } from '../store/useCareer';
+import { GainStrip } from './career/Attributes';
+import { unread } from '../engine/career/milestones';
 import { useGameStore } from '../store/useGameStore';
 
 type Row = [string, (i: number) => string | number];
@@ -115,17 +116,22 @@ export function MatchOver({ match }: { match: MatchState }) {
   const startGame = useGameStore((s) => s.startGame);
   const quit = useGameStore((s) => s.quitToMenu);
   const solo = match.players.length === 1;
-  const career = setup.kind !== 'practice' && !!setup.career;
+  const training = setup.kind !== 'practice' && !!setup.training;
+  const career = setup.kind !== 'practice' && (!!setup.career || training);
+  const gain = useCareer((s) => (career ? (s.career?.lastGain ?? null) : null));
   const openCareer = useCareer((s) => s.setOpen);
+  const newMail = useCareer((s) => (career && s.career ? unread(s.career) : 0));
   const careerNote = useCareer((s) => {
     if (!career || !s.career) return null;
+    if (training) return 'Training session done.';
     const next = nextMatch(s.career);
-    if (next)
-      return `Next: ${ROUND_NAMES[next.round]!.toLowerCase()} against ${next.opponent.name}`;
+    if (next) return `Next: ${next.roundName.toLowerCase()} against ${next.opponent.name}`;
     const last = s.career.results.at(-1);
-    return last
-      ? `${last.name} over: ${last.reached === 'W' ? 'champion!' : `out in the ${last.reached === 'F' ? 'final' : last.reached === 'SF' ? 'semi-finals' : 'quarter-finals'}`} (+${last.points} pts)`
-      : null;
+    if (!last) return null;
+    const reached = describeReached(last);
+    return `${last.name}: ${reached === 'Winner' ? 'champion!' : reached.toLowerCase()} (${
+      last.points ? `+${last.points} pts, ` : ''
+    }£${last.prize.toLocaleString('en-GB')})`;
   });
   const rows = statRows(match);
   if (playsSets(match.options)) rows.unshift(['Sets', (i) => match.players[i]!.setsWon]);
@@ -159,7 +165,13 @@ export function MatchOver({ match }: { match: MatchState }) {
         </table>
         {career ? (
           <>
+            {gain && <GainStrip g={gain} />}
             {careerNote && <p className="career-last">{careerNote}</p>}
+            {newMail > 0 && (
+              <p className="career-last gold" data-testid="new-mail">
+                📬 {newMail} new message{newMail === 1 ? '' : 's'} in your career inbox
+              </p>
+            )}
             <button
               type="button"
               className="primary-btn"
