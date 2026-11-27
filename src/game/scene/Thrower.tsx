@@ -20,7 +20,7 @@ import { WORLD } from '../../engine/board/geometry';
 import { currentAi, currentAiIntent, useGameStore } from '../../store/useGameStore';
 import { appearanceFor, type Appearance } from './appearance';
 import { DartModel } from './Dart';
-import { Hand, handQuaternion, PINCH_POINT } from './Hand';
+import { gripQuaternion, Hand, handQuaternion, PINCH_POINT } from './Hand';
 import { dartTracker, throwerClock } from './dartTracker';
 import { useTier } from './quality';
 import { shirtTexture } from './shirtTexture';
@@ -537,6 +537,7 @@ const target = new Vector3();
 const foreDir = new Vector3();
 const wrist = new Vector3();
 const handQ = new Quaternion();
+const held = new Vector3();
 const loftQ = new Quaternion();
 const rollQ = new Quaternion();
 
@@ -624,14 +625,14 @@ export function Thrower() {
     dir.subVectors(target, grip).normalize();
     right.crossVectors(dir, UP).normalize();
     dir.applyQuaternion(loftQ.setFromAxisAngle(right, LOFT)).normalize();
-    tip.copy(grip).addScaledVector(dir, GRIP_BACK);
+    // Hand: fingers along the forearm, the dart across the fingertips pointing out past
+    // the thumb, its barrel pinched at the grip. The wrist is set back from the pinch.
+    foreDir.subVectors(grip, elbow).normalize();
+    gripQuaternion(foreDir, dir, handQ, held);
+    tip.copy(grip).addScaledVector(held, GRIP_BACK);
+    wrist.copy(PINCH_POINT).applyQuaternion(handQ).negate().add(grip);
     if (upper.current) placeLimb(upper.current, shoulder, elbow);
     if (sleeve.current) placeLimb(sleeve.current, shoulder, shoulder.clone().lerp(elbow, 0.5));
-    // Hand: fingers along the forearm, palm toward where the dart points, the dart
-    // pinched between thumb and fingertips at the grip. The wrist is set back from it.
-    foreDir.subVectors(grip, elbow).normalize();
-    handQuaternion(foreDir, dir, handQ);
-    wrist.copy(PINCH_POINT).applyQuaternion(handQ).negate().add(grip);
     if (fore.current) placeLimb(fore.current, elbow, wrist);
     const h = hand.current;
     if (h) {
@@ -643,7 +644,7 @@ export function Thrower() {
     if (d) {
       d.visible = holdsDart(tl) && (tl < 0 || s.darts.length < 3 || s.phase === 'replay');
       d.position.copy(tip);
-      d.quaternion.setFromUnitVectors(FORWARD, dir);
+      d.quaternion.setFromUnitVectors(FORWARD, held);
       d.quaternion.multiply(rollQ.setFromAxisAngle(FORWARD, Math.PI / 4));
     }
   });
