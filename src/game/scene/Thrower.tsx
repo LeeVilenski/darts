@@ -20,6 +20,7 @@ import { WORLD } from '../../engine/board/geometry';
 import { currentAi, currentAiIntent, useGameStore } from '../../store/useGameStore';
 import { appearanceFor, type Appearance } from './appearance';
 import { DartModel } from './Dart';
+import { Hand, handQuaternion, PINCH_POINT } from './Hand';
 import { dartTracker, throwerClock } from './dartTracker';
 import { useTier } from './quality';
 import { shirtTexture } from './shirtTexture';
@@ -432,7 +433,6 @@ function Body({
       shoulder: new SphereGeometry(0.06 * look.girth, 20, 14),
       collar: new CylinderGeometry(0.056, 0.064, 0.028, 28, 1, true),
       belt: new TorusGeometry(1, 0.018, 8, 40),
-      hand: new SphereGeometry(0.034, 16, 12),
     }),
     [look.girth],
   );
@@ -457,6 +457,7 @@ function Body({
       neckBase: J.neck.clone().add(new Vector3(0, -0.05, 0.01)),
       headBase: J.head.clone().add(new Vector3(0, -0.05, 0)),
       belt: J.waist.clone().add(new Vector3(0, 0.01, 0)),
+      handLQ: handQuaternion(J.handL.clone().sub(J.elbowL), new Vector3(1, 0, 0.3)),
     }),
     [J],
   );
@@ -519,7 +520,10 @@ function Body({
       <Limb a={J.shoulderL} b={feet.sleeveL} r={0.052} material={mats.shirt} shadow={shadow} />
       <Limb a={J.shoulderL} b={J.elbowL} r={0.042} material={mats.skin} shadow={shadow} />
       <Limb a={J.elbowL} b={J.handL} r={0.036} material={mats.skin} shadow={shadow} />
-      <mesh geometry={extra.hand} material={mats.skin} position={J.handL} scale={[0.75, 1.35, 1]} />
+      {/* Relaxed left hand: fingers down, palm toward the thigh (mirrored right hand) */}
+      <group position={J.handL} quaternion={feet.handLQ} scale={[-1, 1, 1]}>
+        <Hand pose="relaxed" material={mats.skin} />
+      </group>
     </group>
   );
 }
@@ -531,6 +535,8 @@ const dir = new Vector3();
 const right = new Vector3();
 const target = new Vector3();
 const foreDir = new Vector3();
+const wrist = new Vector3();
+const handQ = new Quaternion();
 const loftQ = new Quaternion();
 const rollQ = new Quaternion();
 
@@ -572,9 +578,8 @@ export function Thrower() {
     () => ({
       upper: capsule(0.043, shoulder.distanceTo(ELBOW) + 0.05),
       sleeve: capsule(0.053, shoulder.distanceTo(ELBOW) * 0.55),
-      fore: capsule(0.036, FOREARM + 0.03),
-      palm: new SphereGeometry(0.03, 16, 12),
-      thumb: capsule(0.011, 0.045),
+      // Elbow to wrist; the hand carries on to the pinch point.
+      fore: capsule(0.036, FOREARM - PINCH_POINT.length() + 0.04),
     }),
     [shoulder],
   );
@@ -622,13 +627,16 @@ export function Thrower() {
     tip.copy(grip).addScaledVector(dir, GRIP_BACK);
     if (upper.current) placeLimb(upper.current, shoulder, elbow);
     if (sleeve.current) placeLimb(sleeve.current, shoulder, shoulder.clone().lerp(elbow, 0.5));
-    if (fore.current) placeLimb(fore.current, elbow, grip);
+    // Hand: fingers along the forearm, palm toward where the dart points, the dart
+    // pinched between thumb and fingertips at the grip. The wrist is set back from it.
+    foreDir.subVectors(grip, elbow).normalize();
+    handQuaternion(foreDir, dir, handQ);
+    wrist.copy(PINCH_POINT).applyQuaternion(handQ).negate().add(grip);
+    if (fore.current) placeLimb(fore.current, elbow, wrist);
     const h = hand.current;
     if (h) {
-      // Hand along the forearm, fingers up past the grip, pinching the dart.
-      foreDir.subVectors(grip, elbow).normalize();
-      h.position.copy(grip).addScaledVector(foreDir, 0.012);
-      h.quaternion.setFromUnitVectors(UP, foreDir);
+      h.position.copy(wrist);
+      h.quaternion.copy(handQ);
     }
 
     const d = dart.current;
@@ -648,13 +656,7 @@ export function Thrower() {
       <mesh ref={upper} geometry={geo.upper} material={mats.skin} castShadow={shadow} />
       <mesh ref={fore} geometry={geo.fore} material={mats.skin} castShadow={shadow} />
       <group ref={hand}>
-        <mesh geometry={geo.palm} material={mats.skin} scale={[0.85, 1.45, 0.75]} />
-        <mesh
-          geometry={geo.thumb}
-          material={mats.skin}
-          position={[0, 0.02, -0.022]}
-          rotation={[-0.9, 0, 0]}
-        />
+        <Hand pose="pinch" material={mats.skin} />
       </group>
       <group ref={dart}>
         <DartModel />

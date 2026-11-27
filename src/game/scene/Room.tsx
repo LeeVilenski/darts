@@ -4,7 +4,8 @@ import { PMREMGenerator, type Object3D, type SpotLight } from 'three';
 import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
 import { WORLD } from '../../engine/board/geometry';
 import { useTier } from './quality';
-import { chalkboardTexture, paintingTexture, planksTexture } from './textures';
+import { ChalkBoard } from './ChalkBoard';
+import { paintingTexture, planksTexture } from './textures';
 
 const ROOM = { halfWidth: 2.2, height: 3, back: -0.04, front: 4.2 } as const;
 const WAINSCOT = 1.05;
@@ -45,16 +46,13 @@ export function Room() {
       sidePanel: planksTexture([92, 54, 32], 8, true, [5, 1]),
       floor: planksTexture([110, 72, 44], 6, false, [4, 6]),
       cabinet: planksTexture([70, 38, 22], 4, true, [1, 1]),
-      chalk: chalkboardTexture(),
       art: [paintingTexture(20), paintingTexture(200), paintingTexture(120)],
     }),
     [],
   );
   useEffect(
     () => () =>
-      [tex.panel, tex.sidePanel, tex.floor, tex.cabinet, tex.chalk, ...tex.art].forEach((t) =>
-        t.dispose(),
-      ),
+      [tex.panel, tex.sidePanel, tex.floor, tex.cabinet, ...tex.art].forEach((t) => t.dispose()),
     [tex],
   );
 
@@ -278,10 +276,9 @@ export function Room() {
           </mesh>
           {/* Chalk scoreboard on the inside of the left door */}
           {side === -1 && (
-            <mesh position={[side * (CAB.half / 2), 0, 0.001]}>
-              <planeGeometry args={[CAB.half * 0.82, CAB.half * 1.7]} />
-              <meshStandardMaterial map={tex.chalk} roughness={0.95} />
-            </mesh>
+            <group position={[side * (CAB.half / 2), 0, 0.001]}>
+              <ChalkBoard width={CAB.half * 0.82} height={CAB.half * 1.7} />
+            </group>
           )}
         </group>
       ))}

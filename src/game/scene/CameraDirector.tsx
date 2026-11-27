@@ -283,6 +283,16 @@ export function CameraDirector() {
       }
     }
 
+    // Dev only: inspect the scene from a fixed spot (window.__camOverride = { pos, look, half }).
+    const dbg = import.meta.env.DEV
+      ? (window as unknown as { __camOverride?: { pos: number[]; look: number[]; half: number } })
+          .__camOverride
+      : undefined;
+    if (dbg) {
+      pos.fromArray(dbg.pos);
+      look.fromArray(dbg.look);
+      cur.half = dbg.half;
+    }
     camera.position.copy(pos);
     camera.lookAt(look);
     const fov = fovToFrame(cur.half, Math.max(0.05, pos.distanceTo(look)), aspect);

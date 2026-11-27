@@ -53,50 +53,6 @@ export function planksTexture(
   return finish(c, ...repeat);
 }
 
-/** Pub chalkboard with a scribbled score sheet. */
-export function chalkboardTexture() {
-  const { c, ctx } = canvas(512, 768);
-  ctx.fillStyle = '#1d2321';
-  ctx.fillRect(0, 0, 512, 768);
-  for (let i = 0; i < 2500; i++) {
-    ctx.fillStyle = `rgba(255,255,255,${Math.random() * 0.03})`;
-    ctx.fillRect(Math.random() * 512, Math.random() * 768, 3, 3);
-  }
-  ctx.strokeStyle = 'rgba(240,240,230,0.75)';
-  ctx.fillStyle = 'rgba(240,240,230,0.85)';
-  ctx.lineWidth = 4;
-  ctx.font = '700 64px "Comic Sans MS", "Chalkboard SE", cursive';
-  ctx.textAlign = 'center';
-  ctx.fillText('DARTS', 256, 90);
-  ctx.beginPath();
-  ctx.moveTo(256, 130);
-  ctx.lineTo(256, 720);
-  ctx.moveTo(40, 160);
-  ctx.lineTo(472, 160);
-  ctx.stroke();
-  ctx.font = '48px "Comic Sans MS", "Chalkboard SE", cursive';
-  const rows = [
-    ['501', '501'],
-    ['441', '360'],
-    ['301', '275'],
-    ['181', '140'],
-    ['100', '76'],
-  ];
-  rows.forEach(([a, b], i) => {
-    ctx.fillText(a!, 140, 230 + i * 100);
-    ctx.fillText(b!, 372, 230 + i * 100);
-    if (i < rows.length - 1) {
-      ctx.beginPath();
-      ctx.moveTo(100, 215 + i * 100);
-      ctx.lineTo(180, 205 + i * 100);
-      ctx.moveTo(332, 215 + i * 100);
-      ctx.lineTo(412, 205 + i * 100);
-      ctx.stroke();
-    }
-  });
-  return finish(c);
-}
-
 /** A loose abstract "painting" for wall frames. */
 export function paintingTexture(hue: number) {
   const { c, ctx } = canvas(256, 320);
